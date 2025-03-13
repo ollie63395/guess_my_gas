@@ -1,5 +1,6 @@
 import requests
 import csv
+import time
 
 from datetime import datetime
 
@@ -31,4 +32,9 @@ def fetch_fuel_price():
     except Exception as e:
         print("Error fetching data: ", e)
 
-fetch_fuel_price()
+
+while True:
+    fetch_fuel_price()
+    print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("Waiting 3 hours before the next run...\n")
+    time.sleep(3 * 60 * 60)  # Sleep for 3 hours (in seconds)
