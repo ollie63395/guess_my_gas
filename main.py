@@ -22,7 +22,13 @@ def fetch_fuel_price():
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         data = [timestamp, price]
 
-        print(data)
+        with open(csv_file, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(data)
+
+        print(f"{timestamp} - E95 (PULP) Price at Chadstone: {price:.1f}¢/L (Logged)")
 
     except Exception as e:
         print("Error fetching data: ", e)
+
+fetch_fuel_price()
