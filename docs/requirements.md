@@ -20,7 +20,7 @@ Forecast short-term (1–3 day) price trends per station and fuel type
 
 Analyze current vs. predicted prices
 
-Recommend “Fill now” or “Wait until [day]” with confidence score
+Recommend “Fill now” or “Wait until ***[day]***” with confidence score
 
 **F4. Location Handling**
 
