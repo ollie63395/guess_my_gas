@@ -8,13 +8,13 @@ To help users make informed decisions about when and where to refuel by predicti
 
 Existing fuel apps (e.g. 7-Eleven) only provide real-time fuel prices. Users have no way to:
 
-Know if prices will rise/fall tomorrow
+- Know if prices will rise/fall tomorrow
 
-Time their Price Lock usage
+- Time their Price Lock usage
 
-Plan fuel purchases based on historical trends
+- Plan fuel purchases based on historical trends
 
-Compare prices across multiple brands
+- Compare prices across multiple brands
 
 ### 🚀 Project Goals
 
@@ -48,7 +48,7 @@ Accurate predictions require a few weeks of historical data
 
 GPS usage requires user permission
 
-👤 Target Users
+### 👤 Target Users
 
 Drivers looking to save on fuel costs
 
