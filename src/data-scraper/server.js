@@ -7,7 +7,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const DB_FILE = path.join(__dirname, 'fuel_prices.db');
 
 app.use(cors()); // Allow React (localhost:5173) to talk to us
