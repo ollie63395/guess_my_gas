@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Fuel, Zap, Droplet, Circle, Wind, Gauge,
   Calendar as CalendarIcon, Clock, MapPin, Navigation, 
-  Check, DollarSign, TrendingUp, TrendingDown, Award, 
+  Check, TrendingUp, TrendingDown, Award, 
   AlertCircle, Target, CheckCircle2, XCircle, Bell, BellOff,
   Loader2, ChevronDown, Search, LocateFixed
 } from 'lucide-react';
@@ -10,9 +10,12 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, ReferenceDot 
 } from 'recharts';
-import { format, addDays, subDays, isSameDay, setHours } from 'date-fns';
+import { format, addDays, subDays, setHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+
+// --- API URL ---
+const API_BASE = import.meta.env.VITE_API_URL;
 
 // --- Utility ---
 function cn(...inputs: ClassValue[]) {
@@ -25,10 +28,6 @@ const formatCents = (priceInDollars: number | null | undefined) => {
   // Multiply by 100 to get cents, fix to 1 decimal place
   return (priceInDollars * 100).toFixed(1);
 };
-
-// Safe formatter so UI doesn't crash if backend returns null/undefined
-const formatPrice = (value: number | null | undefined, digits = 3) =>
-  typeof value === 'number' ? value.toFixed(digits) : '—';
 
 // --- Types ---
 
@@ -189,7 +188,7 @@ export default function GuessMyGas() {
     try {
       // Call our local API
       const response = await fetch(
-        `http://localhost:3001/api/predict?storeId=${selectedStore.id}&fuelEan=${selectedFuel.ean}&targetDate=${selectedDate.toISOString()}&model=${selectedModel}`
+        `${API_BASE}/api/predict?storeId=${selectedStore.id}&fuelEan=${selectedFuel.ean}&targetDate=${selectedDate.toISOString()}&model=${selectedModel}`
       );
       
       const data = await response.json();
@@ -286,7 +285,7 @@ export default function GuessMyGas() {
       const lng = userLocation?.lng || 144.9631;
       
       try {
-        const res = await fetch(`http://localhost:3001/api/stores?search=${searchQuery}&lat=${lat}&lng=${lng}`);
+        const res = await fetch(`${API_BASE}/api/stores?search=${searchQuery}&lat=${lat}&lng=${lng}`);
         const data = await res.json();
         
         if (Array.isArray(data)) {
