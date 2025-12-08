@@ -4,7 +4,7 @@ import {
   Calendar as CalendarIcon, Clock, MapPin, Navigation, 
   Check, DollarSign, TrendingUp, TrendingDown, Award, 
   AlertCircle, Target, CheckCircle2, XCircle, Bell, BellOff,
-  Loader2
+  Loader2, ChevronDown
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -144,35 +144,6 @@ const STORES: Store[] = [
   }
 ];
 
-// --- Mock Data Generators ---
-
-const generatePrice = (base: number, variance: number, seedDate: Date): number => {
-  const day = seedDate.getDate();
-  const month = seedDate.getMonth();
-  // Pseudo-random based on date
-  const randomOffset = Math.sin(day * month * 0.5) * variance; 
-  const trendOffset = (day % 10) * 0.002; 
-  return Number((base + randomOffset + trendOffset).toFixed(3));
-};
-
-const generateHistoricalData = (selectedDate: Date, fuelTypeId: string): PredictionData[] => {
-  const fuel = FUEL_TYPES.find(f => f.id === fuelTypeId) || FUEL_TYPES[0];
-  const data: PredictionData[] = [];
-  
-  for (let i = -7; i <= 7; i++) {
-    const date = addDays(selectedDate, i);
-    const price = generatePrice(fuel.basePrice, fuel.variance, date);
-    data.push({
-      date: date,
-      displayDate: format(date, 'MMM dd'),
-      fullDate: format(date, 'MMM dd, yyyy'),
-      price: price,
-      isTarget: i === 0
-    });
-  }
-  return data;
-};
-
 // --- Components ---
 
 const Button = React.forwardRef<HTMLButtonElement, React.ComponentProps<'button'>>(
@@ -208,6 +179,9 @@ export default function GuessMyGas() {
   const [alertPrice, setAlertPrice] = useState(1.85);
   const [alertMethod, setAlertMethod] = useState<'email' | 'sms'>('email');
 
+  // Model selection state
+  const [selectedModel, setSelectedModel] = useState<'linear' | 'polynomial' | 'random_forest'>('linear');
+
 const handlePredict = async () => {
     setLoading(true);
     setPredictionResult(null); // Clear old results
@@ -215,7 +189,7 @@ const handlePredict = async () => {
     try {
       // Call our local API
       const response = await fetch(
-        `http://localhost:3001/api/predict?storeId=${selectedStore.id}&fuelEan=${selectedFuel.ean}&targetDate=${selectedDate.toISOString()}`
+        `http://localhost:3001/api/predict?storeId=${selectedStore.id}&fuelEan=${selectedFuel.ean}&targetDate=${selectedDate.toISOString()}&model=${selectedModel}`
       );
       
       const data = await response.json();
@@ -409,6 +383,35 @@ const getThemeColors = (theme: string, isSelected: boolean) => {
                 );
               })}
             </div>
+          </div>
+
+          {/* Model Selection Dropdown */}
+          <div className="mb-6">
+            <h3 className="mb-4 text-sm font-semibold text-slate-700">Prediction Model</h3>
+            
+            <div className="relative">
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value as any)}
+                className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white py-4 pl-4 pr-12 text-lg font-medium text-slate-900 transition-all hover:border-slate-300 focus:border-slate-900 focus:outline-none"
+              >
+                <option value="linear">Linear Regression (Trend Line)</option>
+                <option value="polynomial">Polynomial Regression (Curved)</option>
+                <option value="random_forest">Random Forest (Decision Trees)</option>
+              </select>
+              
+              {/* Custom Chevron Icon positioned over the select box */}
+              <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
+                <ChevronDown className="h-5 w-5" />
+              </div>
+            </div>
+            
+            {/* Helper text to explain the models */}
+            <p className="mt-2 text-xs text-slate-500">
+              {selectedModel === 'linear' && "Best for seeing the long-term direction of prices."}
+              {selectedModel === 'polynomial' && "Best for capturing price cycles (up and down swings)."}
+              {selectedModel === 'random_forest' && "Best for complex patterns, but stays conservative on future dates."}
+            </p>
           </div>
 
           <Button 
