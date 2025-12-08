@@ -3,7 +3,8 @@ import {
   Fuel, Zap, Droplet, Circle, Wind, Gauge,
   Calendar as CalendarIcon, Clock, MapPin, Navigation, 
   Check, DollarSign, TrendingUp, TrendingDown, Award, 
-  AlertCircle, Target, CheckCircle2, XCircle, Bell, BellOff 
+  AlertCircle, Target, CheckCircle2, XCircle, Bell, BellOff,
+  Loader2
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -199,6 +200,7 @@ export default function GuessMyGas() {
   const [selectedTime, setSelectedTime] = useState<number>(6); // Hour 0-23
   const [selectedStore, setSelectedStore] = useState<Store>(STORES[0]);
   const [predictionResult, setPredictionResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
   
   // Modal States
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
@@ -206,29 +208,52 @@ export default function GuessMyGas() {
   const [alertPrice, setAlertPrice] = useState(1.85);
   const [alertMethod, setAlertMethod] = useState<'email' | 'sms'>('email');
 
-  const handlePredict = () => {
-    const history = generateHistoricalData(selectedDate, selectedFuel.id);
-    const targetDay = history.find(h => h.isTarget);
-    const prevDay = history.find(h => isSameDay(h.date, subDays(selectedDate, 1)));
-    const nextDay = history.find(h => isSameDay(h.date, addDays(selectedDate, 1)));
+const handlePredict = async () => {
+    setLoading(true);
+    setPredictionResult(null); // Clear old results
 
-    const comparisons = FUEL_TYPES.map(f => ({
-      ...f,
-      price: generatePrice(f.basePrice, f.variance, selectedDate)
-    })).sort((a, b) => a.price - b.price);
+    try {
+      // Call our local API
+      const response = await fetch(
+        `http://localhost:3001/api/predict?storeId=${selectedStore.id}&fuelEan=${selectedFuel.ean}&targetDate=${selectedDate.toISOString()}`
+      );
+      
+      const data = await response.json();
 
-    setPredictionResult({
-      history,
-      current: targetDay,
-      prev: prevDay,
-      next: nextDay,
-      fuelComparisons: comparisons,
-      timestamp: Date.now()
-    });
-    
-    setTimeout(() => {
-      document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+      if (!response.ok) throw new Error("Failed to fetch data");
+
+      // 4. Merge API data with our static FUEL_TYPES definitions
+      // The API gives us { ean: "52", price: 1.85 }, we need to add the name/color/icon
+      const enrichedComparisons = data.fuelComparisons.map((comp: any) => {
+        const typeDef = FUEL_TYPES.find(f => f.ean === comp.ean);
+        return typeDef ? { ...typeDef, price: comp.price } : null;
+      }).filter(Boolean).sort((a: any, b: any) => a.price - b.price);
+
+      // If comparison list is empty (no DB data yet), fallback to mock logic for display
+      const finalComparisons = enrichedComparisons.length > 0 
+        ? enrichedComparisons 
+        : FUEL_TYPES.map(f => ({ ...f, price: f.basePrice }));
+
+      setPredictionResult({
+        history: data.history,
+        current: data.current,
+        prev: data.history[6], // 7th item is prev day
+        next: data.history[8], // 9th item is next day
+        fuelComparisons: finalComparisons,
+        timestamp: Date.now()
+      });
+
+      // Scroll to results
+      setTimeout(() => {
+        document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+
+    } catch (error) {
+      console.error("Prediction failed:", error);
+      alert("Could not connect to database server. Ensure 'node server.js' is running.");
+    } finally {
+      setLoading(false);
+    }
   };
 
 const getThemeColors = (theme: string, isSelected: boolean) => {
@@ -388,9 +413,17 @@ const getThemeColors = (theme: string, isSelected: boolean) => {
 
           <Button 
             onClick={handlePredict}
-            className="w-full rounded-xl bg-slate-900 py-4 text-lg text-white transition-all hover:bg-slate-800 active:scale-[0.98]"
+            disabled={loading} // Disable while loading
+            className="w-full rounded-xl bg-slate-900 py-4 text-lg text-white transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-70"
           >
-            Get Price Prediction
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Analyzing Database...
+              </div>
+            ) : (
+              "Get Price Prediction"
+            )}
           </Button>
         </Card>
 
@@ -474,6 +507,13 @@ const getThemeColors = (theme: string, isSelected: boolean) => {
                             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
                               <p className="mb-1 font-bold text-slate-900">{data.fullDate}</p>
                               <p className="text-slate-700">${data.price.toFixed(3)}/litre</p>
+                              {/* New Badge */}
+                              <span className={cn(
+                                "mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
+                                data.isReal ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                              )}>
+                                {data.isReal ? "Actual Data" : "Projection"}
+                              </span>
                             </div>
                           );
                         }
