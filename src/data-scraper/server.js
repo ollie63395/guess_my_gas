@@ -13,24 +13,6 @@ app.use(cors()); // Allow React (localhost:5173) to talk to us
 
 const db = new sqlite3.Database(DB_FILE);
 
-// --- Helper: Get Price from DB ---
-const getPricesFromDB = (storeId, fuelEan) => {
-    return new Promise((resolve, reject) => {
-        // Get the most recent 20 prices for this store/fuel
-        const query = `
-            SELECT price_cents, price_date, retrieved_at 
-            FROM prices 
-            WHERE store_id = ? AND fuel_type_ean = ? 
-            ORDER BY retrieved_at DESC 
-            LIMIT 20
-        `;
-        db.all(query, [storeId, fuelEan], (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
-    });
-};
-
 // --- Helper: Get Latest Price for ALL fuels (for comparison) ---
 const getLatestFuelPrices = (storeId) => {
     return new Promise((resolve, reject) => {
@@ -98,6 +80,69 @@ app.get('/api/predict', async (req, res) => {
         console.error("API Error:", error);
         res.status(500).json({ error: error.message });
     }
+});
+
+// --- Helper: Calculate Distance (Haversine Formula) ---
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+}
+
+function deg2rad(deg) {
+    return deg * (Math.PI / 180);
+}
+
+// --- Store Search Endpoint ---
+app.get('/api/stores', (req, res) => {
+    const { search, lat, lng } = req.query;
+    
+    // Default to Melbourne CBD if user denies location
+    const userLat = parseFloat(lat) || -37.8136; 
+    const userLng = parseFloat(lng) || 144.9631; 
+
+    // 1. Base Query
+    let query = "SELECT * FROM stores WHERE is_fuel_store = 1";
+    let params = [];
+
+    // 2. Add Search Filter if provided
+    if (search) {
+        query += " AND (name LIKE ? OR address LIKE ? OR suburb LIKE ? OR postcode LIKE ?)";
+        const term = `%${search}%`;
+        params = [term, term, term, term];
+    }
+
+    db.all(query, params, (err, rows) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        // 3. Calculate Distance for every store found
+        const storesWithDist = rows.map(store => {
+            const dist = getDistanceFromLatLonInKm(userLat, userLng, store.lat, store.lng);
+            return {
+                id: store.store_id,
+                name: store.name,
+                // Format: "123 Main St, Suburb 3000"
+                address: `${store.address}, ${store.suburb} ${store.postcode}`, 
+                distance: `${dist.toFixed(1)} km`,
+                rawDistance: dist, // used for sorting
+                coordinates: { lat: store.lat, lng: store.lng }
+            };
+        });
+
+        // 4. Sort by Nearest and take top 4
+        storesWithDist.sort((a, b) => a.rawDistance - b.rawDistance);
+        
+        res.json(storesWithDist.slice(0, 4));
+    });
 });
 
 app.listen(PORT, () => {

@@ -4,7 +4,7 @@ import {
   Calendar as CalendarIcon, Clock, MapPin, Navigation, 
   Check, DollarSign, TrendingUp, TrendingDown, Award, 
   AlertCircle, Target, CheckCircle2, XCircle, Bell, BellOff,
-  Loader2, ChevronDown
+  Loader2, ChevronDown, Search
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -182,7 +182,12 @@ export default function GuessMyGas() {
   // Model selection state
   const [selectedModel, setSelectedModel] = useState<'linear' | 'polynomial' | 'random_forest'>('linear');
 
-const handlePredict = async () => {
+  // Store search state
+  const [stores, setStores] = useState<Store[]>([]); // Real stores from DB
+  const [searchQuery, setSearchQuery] = useState(''); // User search input
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+
+  const handlePredict = async () => {
     setLoading(true);
     setPredictionResult(null); // Clear old results
 
@@ -230,17 +235,62 @@ const handlePredict = async () => {
     }
   };
 
-const getThemeColors = (theme: string, isSelected: boolean) => {
-  const themes: Record<string, { bg: string; text: string; }> = {
-    emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
-    amber: { bg: 'bg-amber-100', text: 'text-amber-600' },
-    slate: { bg: 'bg-slate-100', text: 'text-slate-600' },
-    sky: { bg: 'bg-sky-100', text: 'text-sky-600' },
-    orange: { bg: 'bg-orange-100', text: 'text-orange-600' }, // <--- NEW
-    indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' }, // <--- NEW
+  const getThemeColors = (theme: string, isSelected: boolean) => {
+    const themes: Record<string, { bg: string; text: string; }> = {
+      emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
+      amber: { bg: 'bg-amber-100', text: 'text-amber-600' },
+      slate: { bg: 'bg-slate-100', text: 'text-slate-600' },
+      sky: { bg: 'bg-sky-100', text: 'text-sky-600' },
+      orange: { bg: 'bg-orange-100', text: 'text-orange-600' }, // <--- NEW
+      indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' }, // <--- NEW
+    };
+    return themes[theme] || themes.slate; // Fallback to slate if theme not found
   };
-  return themes[theme] || themes.slate; // Fallback to slate if theme not found
-};
+
+  // 1. Get User Location on Load
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.log("Location access denied, defaulting to Melbourne CBD");
+        }
+      );
+    }
+  }, []);
+
+  // 2. Fetch Stores when Search or Location changes
+  useEffect(() => {
+    const fetchStores = async () => {
+      const lat = userLocation?.lat || -37.8136; // Default CBD
+      const lng = userLocation?.lng || 144.9631;
+      
+      try {
+        const res = await fetch(`http://localhost:3001/api/stores?search=${searchQuery}&lat=${lat}&lng=${lng}`);
+        const data = await res.json();
+        setStores(data);
+        
+        // Automatically select the first store if the current selection isn't in the new list
+        // (Optional logic to keep UI clean)
+        if (data.length > 0 && !data.find((s: any) => s.id === selectedStore.id)) {
+           // Don't auto-switch if user has already made a deliberate choice, 
+           // but for initial load it's helpful.
+           if (!selectedStore.id) setSelectedStore(data[0]); 
+        }
+      } catch (err) {
+        console.error("Failed to fetch stores", err);
+      }
+    };
+
+    // Debounce search to prevent too many API calls
+    const timeoutId = setTimeout(() => fetchStores(), 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, userLocation]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-16 font-sans text-slate-900">
@@ -346,42 +396,62 @@ const getThemeColors = (theme: string, isSelected: boolean) => {
             </div>
           </div>
 
-          {/* Store Selection */}
+          {/* Store Selection Section */}
           <div className="mb-8">
             <h3 className="mb-4 text-sm font-semibold text-slate-700">Select Store</h3>
+            
+            {/* Search Bar */}
+            <div className="mb-4 relative">
+              <input
+                type="text"
+                placeholder="Search by name, postcode, or suburb..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-10 pr-4 text-sm font-medium transition-all focus:border-slate-900 focus:outline-none"
+              />
+              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            </div>
+
+            {/* Store List */}
             <div className="flex flex-col gap-3">
-              {STORES.map((store) => {
-                const isSelected = selectedStore.id === store.id;
-                return (
-                  <div
-                    key={store.id}
-                    onClick={() => setSelectedStore(store)}
-                    className={cn(
-                      "flex w-full cursor-pointer items-start justify-between rounded-xl border-2 p-4 transition-all",
-                      isSelected 
-                        ? "border-slate-900 bg-slate-50 shadow-md" 
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-md"
-                    )}
-                  >
-                    <div className="flex items-start gap-4">
-                      <MapPin className={cn("mt-1 h-4 w-4", isSelected ? "text-slate-900" : "text-slate-600")} />
-                      <div>
-                        <div className="font-bold text-slate-900">{store.name}</div>
-                        <div className="mb-2 text-sm text-slate-600">{store.address}</div>
-                        <div className="flex items-center gap-1 text-sm font-medium text-slate-600">
-                          <Navigation className="h-3 w-3" />
-                          <span>{store.distance} away</span>
+              {stores.length === 0 ? (
+                <div className="py-4 text-center text-sm text-slate-500">
+                  No stores found. Try a different search.
+                </div>
+              ) : (
+                stores.map((store) => {
+                  const isSelected = selectedStore?.id === store.id;
+                  return (
+                    <div
+                      key={store.id}
+                      onClick={() => setSelectedStore(store)}
+                      className={cn(
+                        "flex w-full cursor-pointer items-start justify-between rounded-xl border-2 p-4 transition-all",
+                        isSelected 
+                          ? "border-slate-900 bg-slate-50 shadow-md" 
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-md"
+                      )}
+                    >
+                      <div className="flex items-start gap-4">
+                        <MapPin className={cn("mt-1 h-4 w-4", isSelected ? "text-slate-900" : "text-slate-600")} />
+                        <div>
+                          <div className="font-bold text-slate-900">{store.name}</div>
+                          <div className="mb-2 text-sm text-slate-600">{store.address}</div>
+                          <div className="flex items-center gap-1 text-sm font-medium text-slate-600">
+                            <Navigation className="h-3 w-3" />
+                            <span>{store.distance} away</span>
+                          </div>
                         </div>
                       </div>
+                      {isSelected && (
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-white">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
                     </div>
-                    {isSelected && (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-white">
-                        <Check className="h-4 w-4" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
