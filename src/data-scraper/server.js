@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+require('./collector');
+
 const { addDays, subDays, format, isSameDay, parseISO } = require('date-fns');
 const { makePrediction } = require('./prediction_engine');
 
