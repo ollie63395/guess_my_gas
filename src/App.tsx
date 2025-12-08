@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Fuel, Zap, Droplet, Circle, Calendar as CalendarIcon, 
-  Clock, MapPin, Navigation, Check, DollarSign, 
-  TrendingUp, TrendingDown, Award, AlertCircle,
-  Target, CheckCircle2, XCircle, Bell, BellOff
+  Fuel, Zap, Droplet, Circle, Wind, Gauge,
+  Calendar as CalendarIcon, Clock, MapPin, Navigation, 
+  Check, DollarSign, TrendingUp, TrendingDown, Award, 
+  AlertCircle, Target, CheckCircle2, XCircle, Bell, BellOff 
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -22,10 +22,11 @@ function cn(...inputs: ClassValue[]) {
 
 interface FuelType {
   id: string;
+  ean: string;
   name: string;
   octane: string;
   icon: React.ElementType;
-  theme: 'emerald' | 'amber' | 'slate' | 'sky';
+  theme: 'emerald' | 'amber' | 'slate' | 'sky' | 'orange' | 'indigo';
   basePrice: number;
   variance: number;
 }
@@ -51,17 +52,29 @@ interface PredictionData {
 const FUEL_TYPES: FuelType[] = [
   {
     id: 'u91',
-    name: 'Unleaded 91',
-    octane: '91 RON',
+    ean: '52',
+    name: 'ULP',
+    octane: 'Mobil Unleaded 91',
     icon: Fuel,
     theme: 'emerald',
     basePrice: 1.95,
     variance: 0.15
   },
   {
+    id: 'p95',
+    ean: '55', // NEW: Premium 95
+    name: 'PULP',
+    octane: 'Mobil Extra 95',
+    icon: Gauge,
+    theme: 'indigo',
+    basePrice: 2.10,
+    variance: 0.16
+  },
+  {
     id: 'p98',
-    name: 'Premium 98',
-    octane: '98 RON',
+    ean: '56',
+    name: 'PULP98',
+    octane: 'Mobil Supreme+ 98',
     icon: Zap,
     theme: 'amber',
     basePrice: 2.25,
@@ -69,8 +82,9 @@ const FUEL_TYPES: FuelType[] = [
   },
   {
     id: 'diesel',
-    name: 'Special Diesel',
-    octane: 'CN 50+',
+    ean: '53',
+    name: 'Diesel',
+    octane: 'Mobil Diesel Efficient',
     icon: Droplet,
     theme: 'slate',
     basePrice: 2.10,
@@ -78,12 +92,23 @@ const FUEL_TYPES: FuelType[] = [
   },
   {
     id: 'e10',
-    name: 'E10 Unleaded',
-    octane: '94 RON (10% Ethanol)',
+    ean: '57',
+    name: 'E10',
+    octane: 'Mobil Unleaded E10',
     icon: Circle,
     theme: 'sky',
     basePrice: 1.91,
     variance: 0.12
+  },
+  {
+    id: 'lpg',
+    ean: '54', // NEW: LPG
+    name: 'LPG',
+    octane: 'AutoGas LPG',
+    icon: Wind,
+    theme: 'orange',
+    basePrice: 0.95,
+    variance: 0.08
   }
 ];
 
@@ -206,15 +231,17 @@ export default function GuessMyGas() {
     }, 100);
   };
 
-  const getThemeColors = (theme: string, isSelected: boolean) => {
-    const themes: Record<string, { bg: string; text: string; }> = {
-      emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
-      amber: { bg: 'bg-amber-100', text: 'text-amber-600' },
-      slate: { bg: 'bg-slate-100', text: 'text-slate-600' },
-      sky: { bg: 'bg-sky-100', text: 'text-sky-600' },
-    };
-    return themes[theme];
+const getThemeColors = (theme: string, isSelected: boolean) => {
+  const themes: Record<string, { bg: string; text: string; }> = {
+    emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
+    amber: { bg: 'bg-amber-100', text: 'text-amber-600' },
+    slate: { bg: 'bg-slate-100', text: 'text-slate-600' },
+    sky: { bg: 'bg-sky-100', text: 'text-sky-600' },
+    orange: { bg: 'bg-orange-100', text: 'text-orange-600' }, // <--- NEW
+    indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' }, // <--- NEW
   };
+  return themes[theme] || themes.slate; // Fallback to slate if theme not found
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-16 font-sans text-slate-900">
@@ -242,7 +269,7 @@ export default function GuessMyGas() {
           {/* Fuel Type Selection */}
           <div className="mb-8">
             <h3 className="mb-4 text-sm font-semibold text-slate-700">Select Fuel Type</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {FUEL_TYPES.map((fuel) => {
                 const isSelected = selectedFuel.id === fuel.id;
                 const theme = getThemeColors(fuel.theme, isSelected);

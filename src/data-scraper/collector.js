@@ -18,7 +18,7 @@ const db = new sqlite3.Database(DB_FILE);
 
 function initDB() {
     db.serialize(() => {
-        // 1. Stores Table
+        // 1. Stores Table (Existing)
         db.run(`CREATE TABLE IF NOT EXISTS stores (
             store_id TEXT PRIMARY KEY,
             name TEXT,
@@ -30,9 +30,24 @@ function initDB() {
             is_fuel_store INTEGER
         )`);
 
-        // 2. Prices Table
-        // We store 'retrieved_at' to know when we saw this price
-        // We store 'price_date' (from API) to know when 7-Eleven says it changed
+        // 2. Fuel Reference Table (NEW!)
+        db.run(`CREATE TABLE IF NOT EXISTS fuel_ref (
+            ean TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT
+        )`);
+
+        // Insert the User's Mapping Rules
+        const stmtType = db.prepare(`INSERT OR IGNORE INTO fuel_ref (ean, name, description) VALUES (?, ?, ?)`);
+        stmtType.run('52', 'ULP', 'Mobil Unleaded 91');
+        stmtType.run('53', 'Diesel', 'Mobil Diesel Efficient');
+        stmtType.run('54', 'LPG', 'AutoGas LPG');
+        stmtType.run('55', 'PULP', 'Mobil Extra 95');
+        stmtType.run('56', 'PULP98', 'Mobil Supreme+ 98');
+        stmtType.run('57', 'E10', 'Mobil Unleaded E10');
+        stmtType.finalize();
+
+        // 3. Prices Table (Existing)
         db.run(`CREATE TABLE IF NOT EXISTS prices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             store_id TEXT,
@@ -40,10 +55,11 @@ function initDB() {
             price_cents INTEGER,
             price_date TEXT,
             retrieved_at TEXT,
-            FOREIGN KEY(store_id) REFERENCES stores(store_id)
+            FOREIGN KEY(store_id) REFERENCES stores(store_id),
+            FOREIGN KEY(fuel_type_ean) REFERENCES fuel_ref(ean)
         )`);
         
-        console.log("Database initialized.");
+        console.log("Database initialized with Fuel Reference map.");
     });
 }
 
