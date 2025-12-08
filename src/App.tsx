@@ -13,6 +13,7 @@ import {
 import { format, addDays, subDays, setHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import logo from '../public/pwa-512x512.png';
 
 // --- API URL ---
 const API_BASE = import.meta.env.VITE_API_URL;
@@ -306,8 +307,9 @@ export default function GuessMyGas() {
       
       {/* 1. Header Section */}
       <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
-          <div className="flex flex-col">
+        <div className="mx-auto flex max-w-7xl items-center justify-start px-6 py-6 gap-4">
+          <img src={logo} alt="GuessMyGas Logo" className="h-10 w-10" />
+          <div className="flex flex-col items-start">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">GuessMyGas</h1>
             <p className="text-sm font-medium text-slate-600">Accurate fuel price predictions powered by data</p>
           </div>
