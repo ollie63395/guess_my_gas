@@ -4,7 +4,8 @@ const { PolynomialRegression } = require('ml-regression-polynomial');
 const { RandomForestRegression } = require('ml-random-forest');
 const { addDays, differenceInDays } = require('date-fns');
 
-const DB_FILE = './fuel_prices.db';
+const path = require('path');
+const DB_FILE = path.join(__dirname, 'fuel_prices.db');
 const db = new sqlite3.Database(DB_FILE);
 
 // --- 1. Data Fetching Layer ---
@@ -122,14 +123,21 @@ const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear'
 
     const isTrained = strategy.train(rawData);
 
-    // Fallback
+    // Fallback if no/insufficient data
     if (!isTrained || rawData.length === 0) {
         return rawData.length > 0 
             ? rawData[rawData.length - 1].price_cents / 100 
             : 1.50; 
     }
 
-    return strategy.predict(targetDate);
+    const predicted = strategy.predict(targetDate);
+
+    // Regression can produce NaN/Infinity if all dates are identical; guard and fallback to last known price
+    if (!Number.isFinite(predicted)) {
+        return rawData[rawData.length - 1].price_cents / 100;
+    }
+
+    return predicted;
 };
 
 module.exports = { makePrediction };

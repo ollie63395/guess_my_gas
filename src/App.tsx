@@ -4,7 +4,7 @@ import {
   Calendar as CalendarIcon, Clock, MapPin, Navigation, 
   Check, DollarSign, TrendingUp, TrendingDown, Award, 
   AlertCircle, Target, CheckCircle2, XCircle, Bell, BellOff,
-  Loader2, ChevronDown, Search
+  Loader2, ChevronDown, Search, LocateFixed
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -18,6 +18,10 @@ import { twMerge } from 'tailwind-merge';
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+// Safe formatter so UI doesn't crash if backend returns null/undefined
+const formatPrice = (value: number | null | undefined, digits = 3) =>
+  typeof value === 'number' ? value.toFixed(digits) : '—';
 
 // --- Types ---
 
@@ -113,37 +117,6 @@ const FUEL_TYPES: FuelType[] = [
   }
 ];
 
-const STORES: Store[] = [
-  {
-    id: 'store-001',
-    name: '7-Eleven QV Melbourne',
-    address: '185 Swanston St, Melbourne VIC 3000',
-    distance: '1.2 km',
-    coordinates: { lat: -37.8106, lng: 144.9654 }
-  },
-  {
-    id: 'store-002',
-    name: '7-Eleven South Yarra',
-    address: '163 Toorak Rd, South Yarra VIC 3141',
-    distance: '3.8 km',
-    coordinates: { lat: -37.8390, lng: 144.9930 }
-  },
-  {
-    id: 'store-003',
-    name: '7-Eleven St Kilda',
-    address: '115 Fitzroy St, St Kilda VIC 3182',
-    distance: '6.5 km',
-    coordinates: { lat: -37.8596, lng: 144.9793 }
-  },
-  {
-    id: 'store-004',
-    name: '7-Eleven Clayton',
-    address: '1378 Centre Rd, Clayton South VIC 3169',
-    distance: '19.2 km',
-    coordinates: { lat: -37.9300, lng: 145.1200 }
-  }
-];
-
 // --- Components ---
 
 const Button = React.forwardRef<HTMLButtonElement, React.ComponentProps<'button'>>(
@@ -169,7 +142,7 @@ export default function GuessMyGas() {
   const [selectedFuel, setSelectedFuel] = useState<FuelType>(FUEL_TYPES[0]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState<number>(6); // Hour 0-23
-  const [selectedStore, setSelectedStore] = useState<Store>(STORES[0]);
+  const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [predictionResult, setPredictionResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   
@@ -186,8 +159,23 @@ export default function GuessMyGas() {
   const [stores, setStores] = useState<Store[]>([]); // Real stores from DB
   const [searchQuery, setSearchQuery] = useState(''); // User search input
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+
+  // Derived pricing values for safer rendering
+  const currentPrice = typeof predictionResult?.current?.price === 'number' ? predictionResult.current.price : null;
+  const prevPrice = typeof predictionResult?.prev?.price === 'number' ? predictionResult.prev.price : null;
+  const nextPrice = typeof predictionResult?.next?.price === 'number' ? predictionResult.next.price : null;
+  const priceDeltaPrev = currentPrice !== null && prevPrice !== null ? currentPrice - prevPrice : null;
+  const hasPredictionData = currentPrice !== null;
 
   const handlePredict = async () => {
+
+    // Safety check
+    if (!selectedStore) {
+      alert("Please select a store first.");
+      return;
+    }
+
     setLoading(true);
     setPredictionResult(null); // Clear old results
 
@@ -247,6 +235,26 @@ export default function GuessMyGas() {
     return themes[theme] || themes.slate; // Fallback to slate if theme not found
   };
 
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) return alert("Geolocation is not supported by your browser");
+    
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        console.log("📍 User Location Updated:", latitude, longitude);
+        setUserLocation({ lat: latitude, lng: longitude });
+        setIsLocating(false);
+      },
+      (error) => {
+        console.error("Location error:", error);
+        alert("Unable to retrieve your location. Please check browser permissions.");
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true } // Force GPS over generic WiFi location
+    );
+  };
+
   // 1. Get User Location on Load
   useEffect(() => {
     if (navigator.geolocation) {
@@ -267,30 +275,33 @@ export default function GuessMyGas() {
   // 2. Fetch Stores when Search or Location changes
   useEffect(() => {
     const fetchStores = async () => {
-      const lat = userLocation?.lat || -37.8136; // Default CBD
+      const lat = userLocation?.lat || -37.8136;
       const lng = userLocation?.lng || 144.9631;
       
       try {
         const res = await fetch(`http://localhost:3001/api/stores?search=${searchQuery}&lat=${lat}&lng=${lng}`);
         const data = await res.json();
-        setStores(data);
         
-        // Automatically select the first store if the current selection isn't in the new list
-        // (Optional logic to keep UI clean)
-        if (data.length > 0 && !data.find((s: any) => s.id === selectedStore.id)) {
-           // Don't auto-switch if user has already made a deliberate choice, 
-           // but for initial load it's helpful.
-           if (!selectedStore.id) setSelectedStore(data[0]); 
+        if (Array.isArray(data)) {
+            setStores(data);
+
+            // AUTO-SELECT LOGIC:
+            // If we found stores AND (nothing is currently selected OR the currently selected store isn't in the new list)
+            // Then select the first (closest) store automatically.
+            const currentSelectionExistsInNewList = selectedStore && data.find(s => s.id === selectedStore.id);
+            
+            if (data.length > 0 && !currentSelectionExistsInNewList) {
+                setSelectedStore(data[0]);
+            }
         }
       } catch (err) {
         console.error("Failed to fetch stores", err);
       }
     };
 
-    // Debounce search to prevent too many API calls
     const timeoutId = setTimeout(() => fetchStores(), 300);
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, userLocation]);
+  }, [searchQuery, userLocation, selectedStore]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-16 font-sans text-slate-900">
@@ -400,16 +411,38 @@ export default function GuessMyGas() {
           <div className="mb-8">
             <h3 className="mb-4 text-sm font-semibold text-slate-700">Select Store</h3>
             
-            {/* Search Bar */}
-            <div className="mb-4 relative">
-              <input
-                type="text"
-                placeholder="Search by name, postcode, or suburb..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-10 pr-4 text-sm font-medium transition-all focus:border-slate-900 focus:outline-none"
-              />
-              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            {/* Search Bar & Locate Button */}
+            <div className="mb-4 flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Search by name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-10 pr-4 text-sm font-medium transition-all focus:border-slate-900 focus:outline-none"
+                />
+                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              </div>
+              
+              <button
+                onClick={handleLocateMe}
+                disabled={isLocating}
+                className="flex items-center justify-center rounded-xl border-2 border-slate-200 bg-white px-4 text-slate-600 transition-all hover:border-slate-900 hover:text-slate-900 active:scale-95 disabled:opacity-50"
+                title="Use my current location"
+              >
+                {isLocating ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <LocateFixed className="h-5 w-5" />
+                )}
+              </button>
+            </div>
+            
+            {/* Debug/Info Text - Optional, remove later */}
+            <div className="mb-4 text-xs text-slate-400 text-right">
+                {userLocation 
+                  ? `Using location: ${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`
+                  : "Using default location (Melb CBD)"}
             </div>
 
             {/* Store List */}
@@ -486,14 +519,18 @@ export default function GuessMyGas() {
 
           <Button 
             onClick={handlePredict}
-            disabled={loading} // Disable while loading
-            className="w-full rounded-xl bg-slate-900 py-4 text-lg text-white transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-70"
+            // Disable if loading OR if no store is selected
+            disabled={loading || !selectedStore} 
+            className="w-full rounded-xl bg-slate-900 py-4 text-lg text-white transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 Analyzing Database...
               </div>
+            ) : !selectedStore ? (
+              // Change text if no store selected
+              "Select a Store to Continue"
             ) : (
               "Get Price Prediction"
             )}
@@ -501,7 +538,7 @@ export default function GuessMyGas() {
         </Card>
 
         {/* 3. Prediction Results Section */}
-        {predictionResult && (
+        {hasPredictionData && (
           <div id="results-section" className="animate-in fade-in slide-in-from-bottom-8 duration-700">
             
             {/* Main Prediction Card */}
@@ -517,25 +554,29 @@ export default function GuessMyGas() {
                   <div className="flex items-start gap-1">
                     <DollarSign className="mt-2 h-5 w-5 text-slate-900" />
                     <span className="text-5xl font-bold tracking-tight text-slate-900">
-                      {predictionResult.current.price.toFixed(3)}
+                      {formatPrice(currentPrice)}
                     </span>
                     <span className="mt-6 text-sm text-slate-600">/litre</span>
                   </div>
                   <div className="mt-1 flex items-center gap-1 text-sm font-medium">
-                    {predictionResult.current.price > predictionResult.prev.price ? (
-                      <>
-                        <TrendingUp className="h-4 w-4 text-red-600" />
-                        <span className="text-red-600">
-                          +{(predictionResult.current.price - predictionResult.prev.price).toFixed(3)} (0.8%)
-                        </span>
-                      </>
+                    {priceDeltaPrev !== null ? (
+                      priceDeltaPrev > 0 ? (
+                        <>
+                          <TrendingUp className="h-4 w-4 text-red-600" />
+                          <span className="text-red-600">
+                            +{priceDeltaPrev.toFixed(3)} (0.8%)
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <TrendingDown className="h-4 w-4 text-emerald-600" />
+                          <span className="text-emerald-600">
+                            {priceDeltaPrev.toFixed(3)} (-0.5%)
+                          </span>
+                        </>
+                      )
                     ) : (
-                      <>
-                        <TrendingDown className="h-4 w-4 text-emerald-600" />
-                        <span className="text-emerald-600">
-                          {(predictionResult.current.price - predictionResult.prev.price).toFixed(3)} (-0.5%)
-                        </span>
-                      </>
+                      <span className="text-slate-600">Change unavailable</span>
                     )}
                   </div>
                 </div>
@@ -604,7 +645,7 @@ export default function GuessMyGas() {
                     {/* Highlight selected date */}
                     <ReferenceDot 
                       x={predictionResult.current.displayDate} 
-                      y={predictionResult.current.price} 
+                      y={currentPrice ?? 0} 
                       r={8} 
                       fill="#0f172a" 
                       stroke="#fff" 
@@ -638,16 +679,20 @@ export default function GuessMyGas() {
                       <div className="font-bold text-slate-900">{format(subDays(selectedDate, 1), 'MMM dd, yyyy')}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-slate-900">${predictionResult.prev.price.toFixed(3)}</div>
-                      <div className={cn("text-xs flex items-center justify-end gap-1", 
-                        predictionResult.prev.price < predictionResult.current.price ? "text-emerald-600" : "text-red-600"
-                      )}>
-                        {predictionResult.prev.price < predictionResult.current.price ? (
-                          <>Cheaper <TrendingDown className="h-3 w-3" /></>
-                        ) : (
-                          <>Higher <TrendingUp className="h-3 w-3" /></>
-                        )}
-                      </div>
+                      <div className="text-2xl font-bold text-slate-900">${formatPrice(prevPrice)}</div>
+                      {prevPrice !== null && currentPrice !== null ? (
+                        <div className={cn("text-xs flex items-center justify-end gap-1", 
+                          prevPrice < currentPrice ? "text-emerald-600" : "text-red-600"
+                        )}>
+                          {prevPrice < currentPrice ? (
+                            <>Cheaper <TrendingDown className="h-3 w-3" /></>
+                          ) : (
+                            <>Higher <TrendingUp className="h-3 w-3" /></>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500">Comparison unavailable</div>
+                      )}
                     </div>
                   </div>
 
@@ -658,7 +703,7 @@ export default function GuessMyGas() {
                       <div className="font-bold text-slate-900">{format(selectedDate, 'MMM dd, yyyy')}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-slate-900">${predictionResult.current.price.toFixed(3)}</div>
+                      <div className="text-2xl font-bold text-slate-900">${formatPrice(currentPrice)}</div>
                     </div>
                   </div>
 
@@ -669,16 +714,20 @@ export default function GuessMyGas() {
                       <div className="font-bold text-slate-900">{format(addDays(selectedDate, 1), 'MMM dd, yyyy')}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-slate-900">${predictionResult.next.price.toFixed(3)}</div>
-                      <div className={cn("text-xs flex items-center justify-end gap-1", 
-                        predictionResult.next.price < predictionResult.current.price ? "text-emerald-600" : "text-red-600"
-                      )}>
-                        {predictionResult.next.price < predictionResult.current.price ? (
-                          <>Cheaper <TrendingDown className="h-3 w-3" /></>
-                        ) : (
-                          <>Higher <TrendingUp className="h-3 w-3" /></>
-                        )}
-                      </div>
+                      <div className="text-2xl font-bold text-slate-900">${formatPrice(nextPrice)}</div>
+                      {nextPrice !== null && currentPrice !== null ? (
+                        <div className={cn("text-xs flex items-center justify-end gap-1", 
+                          nextPrice < currentPrice ? "text-emerald-600" : "text-red-600"
+                        )}>
+                          {nextPrice < currentPrice ? (
+                            <>Cheaper <TrendingDown className="h-3 w-3" /></>
+                          ) : (
+                            <>Higher <TrendingUp className="h-3 w-3" /></>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500">Comparison unavailable</div>
+                      )}
                     </div>
                   </div>
                 </div>
