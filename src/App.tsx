@@ -189,7 +189,6 @@ export default function GuessMyGas() {
       if (!response.ok) throw new Error("Failed to fetch data");
 
       // 4. Merge API data with our static FUEL_TYPES definitions
-      // The API gives us { ean: "52", price: 1.85 }, we need to add the name/color/icon
       const enrichedComparisons = data.fuelComparisons.map((comp: any) => {
         const typeDef = FUEL_TYPES.find(f => f.ean === comp.ean);
         return typeDef ? { ...typeDef, price: comp.price } : null;
@@ -228,8 +227,8 @@ export default function GuessMyGas() {
       amber: { bg: 'bg-amber-100', text: 'text-amber-600' },
       slate: { bg: 'bg-slate-100', text: 'text-slate-600' },
       sky: { bg: 'bg-sky-100', text: 'text-sky-600' },
-      orange: { bg: 'bg-orange-100', text: 'text-orange-600' }, // <--- NEW
-      indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' }, // <--- NEW
+      orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
+      indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' },
     };
     return themes[theme] || themes.slate; // Fallback to slate if theme not found
   };

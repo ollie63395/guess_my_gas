@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const { SimpleLinearRegression } = require('ml-regression-simple-linear');
 const { PolynomialRegression } = require('ml-regression-polynomial');
 const { RandomForestRegression } = require('ml-random-forest');
-const { addDays, differenceInDays } = require('date-fns');
+const { differenceInDays, format } = require('date-fns'); // Added format
 
 const path = require('path');
 const DB_FILE = path.join(__dirname, 'fuel_prices.db');
@@ -17,12 +17,42 @@ const getTrainingData = (storeId, fuelEan) => {
             WHERE store_id = ? AND fuel_type_ean = ? 
             ORDER BY price_date ASC
             LIMIT 100 
-        `; // Increased limit for Random Forest (needs more data to be smart)
+        `; 
         db.all(query, [storeId, fuelEan], (err, rows) => {
             if (err) reject(err);
             else resolve(rows);
         });
     });
+};
+
+// --- Helper: Preprocess Data (Deduplicate Days) ---
+// This fixes the "Singular Matrix" error by averaging prices for the same day
+const preprocessData = (rawData) => {
+    const dailyMap = new Map();
+
+    rawData.forEach(row => {
+        // Normalize date to YYYY-MM-DD to group same-day entries
+        const dateKey = row.price_date.substring(0, 10); 
+        
+        if (!dailyMap.has(dateKey)) {
+            dailyMap.set(dateKey, { total: 0, count: 0, date: row.price_date });
+        }
+        
+        const entry = dailyMap.get(dateKey);
+        entry.total += row.price_cents;
+        entry.count += 1;
+    });
+
+    // Convert back to array
+    const cleanData = Array.from(dailyMap.values()).map(entry => ({
+        price_date: entry.date,
+        price_cents: entry.total / entry.count // Average price for that day
+    }));
+
+    // Sort by date just in case map order got mixed
+    cleanData.sort((a, b) => new Date(a.price_date) - new Date(b.price_date));
+    
+    return cleanData;
 };
 
 // --- 2. Model Strategies ---
@@ -31,11 +61,16 @@ class LinearRegressionModel {
 
     train(data) {
         if (data.length < 2) return false;
-        this.startDate = new Date(data[0].price_date);
-        const xValues = data.map(d => differenceInDays(new Date(d.price_date), this.startDate));
-        const yValues = data.map(d => d.price_cents / 1000); 
-        this.model = new SimpleLinearRegression(xValues, yValues);
-        return true;
+        try {
+            this.startDate = new Date(data[0].price_date);
+            const xValues = data.map(d => differenceInDays(new Date(d.price_date), this.startDate));
+            const yValues = data.map(d => d.price_cents / 1000); 
+            this.model = new SimpleLinearRegression(xValues, yValues);
+            return true;
+        } catch (e) {
+            console.error("Linear Training Failed:", e.message);
+            return false;
+        }
     }
 
     predict(targetDate) {
@@ -50,20 +85,22 @@ class PolynomialRegressionModel {
     constructor() { this.model = null; }
 
     train(data) {
-        // Polynomial needs at least 3 points to make a curve
-        if (data.length < 3) return false;
+        // Needs strictly distinct X values. Preprocessing handles this, but let's be safe.
+        if (data.length < 4) return false; 
 
-        this.startDate = new Date(data[0].price_date);
-        
-        const xValues = data.map(d => differenceInDays(new Date(d.price_date), this.startDate));
-        const yValues = data.map(d => d.price_cents / 1000);
+        try {
+            this.startDate = new Date(data[0].price_date);
+            
+            const xValues = data.map(d => differenceInDays(new Date(d.price_date), this.startDate));
+            const yValues = data.map(d => d.price_cents / 1000);
 
-        // Degree 3 allows for "Up, Down, Up" patterns (S-shapes)
-        // Degree 2 is a simple U-shape or Hill-shape
-        const degree = 3; 
-        
-        this.model = new PolynomialRegression(xValues, yValues, degree);
-        return true;
+            // Using Degree 3 (Cubic)
+            this.model = new PolynomialRegression(xValues, yValues, 3);
+            return true;
+        } catch (e) {
+            console.error("Polynomial Training Failed:", e.message); // Will catch "Matrix singular"
+            return false;
+        }
     }
 
     predict(targetDate) {
@@ -78,30 +115,29 @@ class RandomForestModel {
     constructor() { this.model = null; }
     
     train(data) {
-        if (data.length < 5) return false; // Needs decent data quantity
+        if (data.length < 5) return false; 
 
-        this.startDate = new Date(data[0].price_date);
-        
-        // Random Forest expects a Matrix (Array of Arrays) for X: [[0], [1], [2]]
-        const xValues = data.map(d => [differenceInDays(new Date(d.price_date), this.startDate)]);
-        const yValues = data.map(d => d.price_cents / 1000);
+        try {
+            this.startDate = new Date(data[0].price_date);
+            const xValues = data.map(d => [differenceInDays(new Date(d.price_date), this.startDate)]);
+            const yValues = data.map(d => d.price_cents / 1000);
 
-        // Configuration: 50 trees, max depth 10
-        this.model = new RandomForestRegression({
-            nEstimators: 50,
-            treeOptions: { maxDepth: 10 }
-        });
-        
-        this.model.train(xValues, yValues);
-        return true;
+            this.model = new RandomForestRegression({
+                nEstimators: 50,
+                treeOptions: { maxDepth: 10 }
+            });
+            
+            this.model.train(xValues, yValues);
+            return true;
+        } catch (e) {
+            console.error("RF Training Failed:", e.message);
+            return false;
+        }
     }
 
     predict(targetDate) {
         if (!this.model) return null;
-        
         const xInput = differenceInDays(new Date(targetDate), this.startDate);
-        
-        // Predict returns an array, we want the first result
         const prediction = this.model.predict([[xInput]])[0];
         return Number(prediction.toFixed(3));
     }
@@ -116,33 +152,37 @@ const Models = {
 };
 
 const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear') => {
-    const rawData = await getTrainingData(storeId, fuelEan);
+    let rawData = await getTrainingData(storeId, fuelEan);
     
+    // 1. CLEAN THE DATA (Fixes Singular Matrix Error)
+    const cleanData = preprocessData(rawData);
+
     const ModelClass = Models[modelType] || Models['linear'];
     const strategy = new ModelClass();
 
-    const isTrained = strategy.train(rawData);
+    // 2. ATTEMPT TRAINING (with try/catch inside classes)
+    const isTrained = strategy.train(cleanData);
 
-    // --- FALLBACK LOGIC (When not enough data) ---
-    if (!isTrained || rawData.length === 0) {
-        // Get the last known price or default to 1.85
-        const basePrice = rawData.length > 0 
-            ? rawData[rawData.length - 1].price_cents / 1000
+    // --- FALLBACK LOGIC (When not enough data or training failed) ---
+    if (!isTrained || cleanData.length === 0) {
+        // Fallback to Linear if Poly failed? Or just basic average?
+        // Perform a simulated fallback based on the last known price.
+        const basePrice = cleanData.length > 0 
+            ? cleanData[cleanData.length - 1].price_cents / 1000
             : 1.85;
 
-        // SIMULATION: If we have no history, add fake "noise" so the graph isn't flat.
-        // This makes the app look working until 2-3 days worth of data is collected.
+        // Add fake "noise" so graph isn't flat while waiting for more data
         const dayOfMonth = new Date(targetDate).getDate();
-        const fakeFluctuation = Math.sin(dayOfMonth * 0.5) * 0.05; // +/- 5 cents swing
+        const fakeFluctuation = Math.sin(dayOfMonth * 0.5) * 0.05; 
 
         return Number((basePrice + fakeFluctuation).toFixed(3));
     }
 
     const predicted = strategy.predict(targetDate);
 
-    // Regression can produce NaN/Infinity if all dates are identical; guard and fallback to last known price
+    // Guard against NaN/Infinity
     if (!Number.isFinite(predicted)) {
-        return rawData[rawData.length - 1].price_cents / 1000;
+        return cleanData[cleanData.length - 1].price_cents / 1000;
     }
 
     return predicted;

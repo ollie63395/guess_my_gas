@@ -16,7 +16,7 @@ export default defineConfig({
         description: 'Predict 7-Eleven fuel prices in Melbourne',
         theme_color: '#0f172a',
         background_color: '#ffffff',
-        display: 'standalone', // <--- Hides the browser UI on phones!
+        display: 'standalone', // Hides the browser UI on phones
         orientation: 'portrait',
         icons: [
           {
