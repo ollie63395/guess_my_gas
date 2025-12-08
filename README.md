@@ -1,117 +1,136 @@
-# GuessMyGas
+# GuessMyGas ⛽🇦🇺
 
-**GuessMyGas** is an AI-powered app that helps users make smarter decisions about when and where to refuel. By predicting future fuel prices, analyzing price trends, and tracking nearby stations across multiple vendors, GuessMyGas saves users time and money every time they fill up.
+**GuessMyGas** is a sophisticated fuel price prediction web application tailored for the Australian market (specifically Melbourne). It forecasts fuel prices at 7-Eleven locations using historical data, machine learning models, and real-time scraping.
 
-### ✨ Features
+The application is built as a **Progressive Web App (PWA)**, allowing users to install it on mobile devices for a native app experience.
 
-⛽ Predicts whether you should refuel now or wait (fuel price forecasting)
+---
 
-⛽ Supports multiple fuel types (E10, U91, PULP, Diesel, etc.)
+## 🚀 Features
 
-⛽ Tracks fuel prices at 7-Eleven and other major fuel vendors in Melbourne
+### 🌟 Core Functionality
+*   **Price Prediction Engine:** Forecasts fuel prices for the next 7 days using three selectable Machine Learning models.
+*   **Real-Time Data:** Automatically scrapes 7-Eleven API data every 12 hours to maintain an up-to-date dataset.
+*   **Location Awareness:** 
+    *   **GPS:** Automatically finds the nearest stores to the user.
+    *   **Smart Search:** Search by suburb, postcode, or store name.
+*   **Fuel Type Support:** Covers all major Australian fuel types (Unleaded 91, Premium 95, Premium 98, Diesel, E10, LPG).
 
-⛽ Uses GPS location to show the cheapest nearby station
+### 📊 Data Visualization
+*   **Interactive Graphs:** 15-day trend lines (7 days history + 7 days forecast).
+*   **Unit Conversion:** Automatically handles data normalization to display Australian Cents (e.g., 189.9c).
+*   **Comparison Tools:** "Cheapest vs. Most Expensive" fuel analysis and neighboring day price comparisons.
 
-⛽ Historical data logging for model training and user insight
+### 📱 Mobile Experience
+*   **PWA Support:** Installable on iOS and Android (Add to Home Screen).
+*   **Responsive Design:** Optimized touch targets and layouts for mobile devices.
 
-⛽ Future plans: smart price lock alerts, multi-brand comparison, savings tracker
+---
 
-### 🌐 Tech Stack (Planned)
+## 🛠️ Tech Stack
 
-Python (data collection, API integration, ML models)
+### Frontend (Client)
+*   **Framework:** React + TypeScript (Vite)
+*   **Styling:** Tailwind CSS
+*   **Visualization:** Recharts
+*   **Icons:** Lucide React
+*   **Date Handling:** date-fns
 
-Flask (backend API)
+### Backend (Server)
+*   **Runtime:** Node.js
+*   **API:** Express.js
+*   **Database:** SQLite (Persistent file storage)
+*   **Scraper:** Axios + node-cron
 
-SQLite or PostgreSQL (data storage)
+### Machine Learning
+*   **Linear Regression:** `ml-regression-simple-linear`
+*   **Polynomial Regression:** `ml-regression-simple-linear`
+*   **Random Forest:** `ml-random-forest`
 
-React or Streamlit (frontend dashboard)
+---
 
-Scheduled tasks / Cron for data scraping
+## 🤖 Prediction Models
 
-### 🚀 Project Roadmap
+The application allows users to toggle between three distinct algorithmic strategies:
 
-Phase 1: Fuel price collection + GPS-based station lookup (in progress)
+1.  **Linear Regression:**
+    *   *Best for:* Identifying long-term inflation or deflation trends.
+    *   *Logic:* Draws a straight trend line through historical data points.
 
-Phase 2: AI model for fuel price prediction (PULP first, then others)
+2.  **Polynomial Regression (Degree 3):**
+    *   *Best for:* Capturing price cycles (the "sawtooth" pattern typical of AU fuel prices).
+    *   *Logic:* Fits a curved line that can swing up and down based on recent volatility.
 
-Phase 3: Smart alerts, price lock suggestions, and user customization
+3.  **Random Forest Regression:**
+    *   *Best for:* Stability and complex pattern recognition.
+    *   *Logic:* Uses an ensemble of 50 decision trees to predict prices without over-extrapolating wild trends.
 
-Phase 4: Multi-vendor expansion and route planning
+---
 
-### 📅 Status
+## 📂 Project Structure
 
-Currently in early development stage. Using 7-Eleven APIs to collect data for price prediction.
-
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+GUESS_MY_GAS/
+├── public/                 # PWA Icons and manifest assets
+├── src/
+│   ├── data-scraper/       # 🧠 THE BACKEND
+│   │   ├── collector.js        # Scrapes 7-Eleven API (Runs every 12h)
+│   │   ├── server.js           # Express API (Endpoints: /predict, /stores)
+│   │   ├── prediction_engine.js # ML Logic Factory
+│   │   └── fuel_prices.db      # SQLite Database (Persistent)
+│   ├── components/         # React UI Components
+│   └── App.tsx             # Main Frontend Logic
+├── index.html              # Entry point
+└── vite.config.ts          # Vite & PWA Configuration
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## ⚡ Local Development Setup
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+To run this project locally, you need two terminal windows open.
+
+### 1. Start the Backend (API + Scraper)
+This handles the database, serves the API, and starts the background data collector.
+
+```bash
+cd src/data-scraper
+npm install
+node server.js
 ```
+*   *The server runs on port 3001.*
+*   *It will immediately attempt to scrape data if the DB is empty.*
+
+### 2. Start the Frontend
+This runs the React interface.
+
+```bash
+# In the root folder
+npm install
+npm run dev
+```
+*   *The app runs on port 5173.*
+
+---
+
+## ☁️ Deployment Architecture
+
+This project uses a split-hosting strategy to ensure database persistence while maintaining a fast CDN for the frontend.
+
+### Backend: Railway.app
+*   **Service:** Node.js Server (`src/data-scraper`).
+*   **Persistence:** Uses a **Railway Volume** mounted at `/app/src/data-scraper`.
+    *   *Why?* Cloud containers are ephemeral. The volume ensures `fuel_prices.db` survives restarts and deployments.
+*   **Startup:** `node server.js` (which internally requires `collector.js` to start the cron job).
+
+### Frontend: Vercel
+*   **Service:** Static Site (Vite Build).
+*   **Configuration:** 
+    *   Environment Variable `VITE_API_URL` points to the Railway backend URL.
+    *   Build Command: `npm run build`.
+
+---
+
+## 📝 License
+
+This project is for educational and personal use to predict fuel prices. Data is sourced from public API endpoints.
