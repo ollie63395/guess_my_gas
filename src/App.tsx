@@ -50,14 +50,6 @@ interface Store {
   coordinates: { lat: number; lng: number };
 }
 
-interface PredictionData {
-  date: Date;
-  displayDate: string;
-  fullDate: string;
-  price: number;
-  isTarget: boolean;
-}
-
 // --- Australian Constants (Melbourne) ---
 
 const FUEL_TYPES: FuelType[] = [
@@ -229,7 +221,7 @@ export default function GuessMyGas() {
     }
   };
 
-  const getThemeColors = (theme: string, isSelected: boolean) => {
+  const getThemeColors = (theme: string) => {
     const themes: Record<string, { bg: string; text: string; }> = {
       emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
       amber: { bg: 'bg-amber-100', text: 'text-amber-600' },
@@ -252,8 +244,8 @@ export default function GuessMyGas() {
         setUserLocation({ lat: latitude, lng: longitude });
         setIsLocating(false);
       },
-      (error) => {
-        console.error("Location error:", error);
+      (_error) => {
+        console.log("Location access denied or failed, defaulting to Melbourne CBD");
         alert("Unable to retrieve your location. Please check browser permissions.");
         setIsLocating(false);
       },
@@ -271,7 +263,7 @@ export default function GuessMyGas() {
             lng: position.coords.longitude
           });
         },
-        (error) => {
+        (_error) => {
           console.log("Location access denied, defaulting to Melbourne CBD");
         }
       );
@@ -338,7 +330,7 @@ export default function GuessMyGas() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {FUEL_TYPES.map((fuel) => {
                 const isSelected = selectedFuel.id === fuel.id;
-                const theme = getThemeColors(fuel.theme, isSelected);
+                const theme = getThemeColors(fuel.theme);
                 const Icon = fuel.icon;
                 
                 return (
@@ -619,7 +611,7 @@ export default function GuessMyGas() {
                       stroke="#64748b" 
                       fontSize={12} 
                       // Format Y-Axis as Cents
-                      tickFormatter={(value: number) => `${(value * 100).toFixed(0)}`}
+                      tickFormatter={(value: number) => `${(value * 100).toFixed(0)}c`}
                       tickLine={false}
                       axisLine={false}
                       dx={-10}
@@ -633,7 +625,13 @@ export default function GuessMyGas() {
                               <p className="mb-1 font-bold text-slate-900">{data.fullDate}</p>
                               {/* Tooltip in Cents */}
                               <p className="text-slate-700">{formatCents(data.price)}c/litre</p>
-                              {/* ... Badge ... */}
+                              {/* New Badge */}
+                              <span className={cn(
+                                "mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
+                                data.isReal ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                              )}>
+                                {data.isReal ? "Actual Data" : "Projection"}
+                              </span>
                             </div>
                           );
                         }
@@ -923,15 +921,19 @@ export default function GuessMyGas() {
                   <h3 className="mb-3 text-sm font-semibold text-slate-700">Optimal Fill-Up Time</h3>
                   <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6">
                     <div className="mb-3 flex items-start justify-between">
-                      {/* ... */}
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-emerald-600" />
+                        <span className="font-bold text-emerald-900">Best Time to Fill Up</span>
+                      </div>
                       <div className="rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white">
-                        {/* Savings we keep in Dollars as it's a total amount */}
                         Save $4.50
                       </div>
                     </div>
 
                     <div className="mb-2">
-                      <div className="text-xl font-bold text-emerald-900">{format(addDays(selectedDate, 2), 'EEEE, MMM dd')}</div>
+                      <div className="text-xl font-bold text-emerald-900">
+                        {format(addDays(selectedDate, 2), 'EEEE, MMM dd')}
+                      </div>
                       <div className="text-sm font-medium text-emerald-700">Around 6:00 AM</div>
                     </div>
 
