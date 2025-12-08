@@ -19,6 +19,13 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Format Dollars (1.899) to Cents (189.9)
+const formatCents = (priceInDollars: number | null | undefined) => {
+  if (priceInDollars === null || priceInDollars === undefined) return '—';
+  // Multiply by 100 to get cents, fix to 1 decimal place
+  return (priceInDollars * 100).toFixed(1);
+};
+
 // Safe formatter so UI doesn't crash if backend returns null/undefined
 const formatPrice = (value: number | null | undefined, digits = 3) =>
   typeof value === 'number' ? value.toFixed(digits) : '—';
@@ -552,11 +559,14 @@ export default function GuessMyGas() {
                 </div>
                 <div className="mt-4 flex flex-col items-end sm:mt-0">
                   <div className="flex items-start gap-1">
-                    <DollarSign className="mt-2 h-5 w-5 text-slate-900" />
+                    {/* Display Cents (Large) */}
                     <span className="text-5xl font-bold tracking-tight text-slate-900">
-                      {formatPrice(currentPrice)}
+                      {formatCents(predictionResult.current.price)}
                     </span>
-                    <span className="mt-6 text-sm text-slate-600">/litre</span>
+                    <div className="mt-2 flex flex-col">
+                      <span className="text-xl font-bold">c</span>
+                      <span className="text-xs text-slate-600">/litre</span>
+                    </div>
                   </div>
                   <div className="mt-1 flex items-center gap-1 text-sm font-medium">
                     {priceDeltaPrev !== null ? (
@@ -564,14 +574,15 @@ export default function GuessMyGas() {
                         <>
                           <TrendingUp className="h-4 w-4 text-red-600" />
                           <span className="text-red-600">
-                            +{priceDeltaPrev.toFixed(3)} (0.8%)
+                            {/* Delta in cents */}
+                            +{formatCents(priceDeltaPrev)}c (0.8%)
                           </span>
                         </>
                       ) : (
                         <>
                           <TrendingDown className="h-4 w-4 text-emerald-600" />
                           <span className="text-emerald-600">
-                            {priceDeltaPrev.toFixed(3)} (-0.5%)
+                            {formatCents(priceDeltaPrev)}c (-0.5%)
                           </span>
                         </>
                       )
@@ -605,10 +616,11 @@ export default function GuessMyGas() {
                       dy={10}
                     />
                     <YAxis 
-                      domain={['dataMin - 0.1', 'dataMax + 0.1']} 
+                      domain={['dataMin - 0.05', 'dataMax + 0.05']} 
                       stroke="#64748b" 
                       fontSize={12} 
-                      tickFormatter={(value: number) => `$${value.toFixed(2)}`}
+                      // Format Y-Axis as Cents
+                      tickFormatter={(value: number) => `${(value * 100).toFixed(0)}`}
                       tickLine={false}
                       axisLine={false}
                       dx={-10}
@@ -620,41 +632,22 @@ export default function GuessMyGas() {
                           return (
                             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
                               <p className="mb-1 font-bold text-slate-900">{data.fullDate}</p>
-                              <p className="text-slate-700">${data.price.toFixed(3)}/litre</p>
-                              {/* New Badge */}
-                              <span className={cn(
-                                "mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
-                                data.isReal ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
-                              )}>
-                                {data.isReal ? "Actual Data" : "Projection"}
-                              </span>
+                              {/* Tooltip in Cents */}
+                              <p className="text-slate-700">{formatCents(data.price)}c/litre</p>
+                              {/* ... Badge ... */}
                             </div>
                           );
                         }
                         return null;
                       }}
                     />
-                    <Line 
-                      type="monotone" 
-                      dataKey="price" 
-                      stroke="#0f172a" 
-                      strokeWidth={3}
-                      dot={{ r: 4, fill: "#0f172a", stroke: "#fff", strokeWidth: 2 }}
-                      activeDot={{ r: 6, fill: "#0f172a", stroke: "#fff", strokeWidth: 3 }}
-                    />
-                    {/* Highlight selected date */}
-                    <ReferenceDot 
-                      x={predictionResult.current.displayDate} 
-                      y={currentPrice ?? 0} 
-                      r={8} 
-                      fill="#0f172a" 
-                      stroke="#fff" 
-                      strokeWidth={3} 
-                    />
+                    <Line type="monotone" dataKey="price" stroke="#0f172a" strokeWidth={3} dot={{ r: 4, fill: "#0f172a", stroke: "#fff", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#0f172a", stroke: "#fff", strokeWidth: 3 }} />
+                    <ReferenceDot x={predictionResult.current.displayDate} y={currentPrice ?? 0} r={8} fill="#0f172a" stroke="#fff" strokeWidth={3} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-
+              
+              {/* Prediction Confidence */}
               <div className="mt-6 flex justify-center">
                 <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2">
                   <div className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -672,6 +665,7 @@ export default function GuessMyGas() {
               <Card className="p-6">
                 <h3 className="mb-4 text-lg font-bold text-slate-900">Neighboring Days</h3>
                 <div className="space-y-3">
+                  
                   {/* Previous */}
                   <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
                     <div>
@@ -679,19 +673,12 @@ export default function GuessMyGas() {
                       <div className="font-bold text-slate-900">{format(subDays(selectedDate, 1), 'MMM dd, yyyy')}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-slate-900">${formatPrice(prevPrice)}</div>
-                      {prevPrice !== null && currentPrice !== null ? (
-                        <div className={cn("text-xs flex items-center justify-end gap-1", 
-                          prevPrice < currentPrice ? "text-emerald-600" : "text-red-600"
-                        )}>
-                          {prevPrice < currentPrice ? (
-                            <>Cheaper <TrendingDown className="h-3 w-3" /></>
-                          ) : (
-                            <>Higher <TrendingUp className="h-3 w-3" /></>
-                          )}
+                      {/* Price in Cents */}
+                      <div className="text-2xl font-bold text-slate-900">{formatCents(prevPrice)}c</div>
+                      {prevPrice !== null && currentPrice !== null && (
+                        <div className={cn("text-xs flex items-center justify-end gap-1", prevPrice < currentPrice ? "text-emerald-600" : "text-red-600")}>
+                          {prevPrice < currentPrice ? (<>Cheaper <TrendingDown className="h-3 w-3" /></>) : (<>Higher <TrendingUp className="h-3 w-3" /></>)}
                         </div>
-                      ) : (
-                        <div className="text-xs text-slate-500">Comparison unavailable</div>
                       )}
                     </div>
                   </div>
@@ -703,7 +690,8 @@ export default function GuessMyGas() {
                       <div className="font-bold text-slate-900">{format(selectedDate, 'MMM dd, yyyy')}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-slate-900">${formatPrice(currentPrice)}</div>
+                      {/* Price in Cents */}
+                      <div className="text-2xl font-bold text-slate-900">{formatCents(currentPrice)}c</div>
                     </div>
                   </div>
 
@@ -714,19 +702,12 @@ export default function GuessMyGas() {
                       <div className="font-bold text-slate-900">{format(addDays(selectedDate, 1), 'MMM dd, yyyy')}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-slate-900">${formatPrice(nextPrice)}</div>
-                      {nextPrice !== null && currentPrice !== null ? (
-                        <div className={cn("text-xs flex items-center justify-end gap-1", 
-                          nextPrice < currentPrice ? "text-emerald-600" : "text-red-600"
-                        )}>
-                          {nextPrice < currentPrice ? (
-                            <>Cheaper <TrendingDown className="h-3 w-3" /></>
-                          ) : (
-                            <>Higher <TrendingUp className="h-3 w-3" /></>
-                          )}
+                      {/* Price in Cents */}
+                      <div className="text-2xl font-bold text-slate-900">{formatCents(nextPrice)}c</div>
+                      {nextPrice !== null && currentPrice !== null && (
+                        <div className={cn("text-xs flex items-center justify-end gap-1", nextPrice < currentPrice ? "text-emerald-600" : "text-red-600")}>
+                          {nextPrice < currentPrice ? (<>Cheaper <TrendingDown className="h-3 w-3" /></>) : (<>Higher <TrendingUp className="h-3 w-3" /></>)}
                         </div>
-                      ) : (
-                        <div className="text-xs text-slate-500">Comparison unavailable</div>
                       )}
                     </div>
                   </div>
@@ -736,51 +717,35 @@ export default function GuessMyGas() {
               {/* Fuel Comparison */}
               <Card className="p-6">
                 <h3 className="mb-4 text-lg font-bold text-slate-900">Fuel Type Comparison</h3>
-                
                 <div className="mb-6 grid grid-cols-2 gap-3">
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                     <div className="mb-2 flex items-center gap-1 text-xs font-bold text-emerald-700">
                       <Award className="h-4 w-4" /> Cheapest
                     </div>
-                    <div className="mb-1 text-sm font-semibold text-slate-900">
-                      {predictionResult.fuelComparisons[0].name}
-                    </div>
-                    <div className="text-2xl font-bold text-slate-900">
-                      ${predictionResult.fuelComparisons[0].price.toFixed(3)}
-                    </div>
+                    <div className="mb-1 text-sm font-semibold text-slate-900">{predictionResult.fuelComparisons[0].name}</div>
+                    {/* Price in Cents */}
+                    <div className="text-2xl font-bold text-slate-900">{formatCents(predictionResult.fuelComparisons[0].price)}c</div>
                   </div>
                   <div className="rounded-lg border border-red-200 bg-red-50 p-4">
                     <div className="mb-2 flex items-center gap-1 text-xs font-bold text-red-700">
                       <AlertCircle className="h-4 w-4" /> Most Expensive
                     </div>
-                    <div className="mb-1 text-sm font-semibold text-slate-900">
-                      {predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].name}
-                    </div>
-                    <div className="text-2xl font-bold text-slate-900">
-                      ${predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].price.toFixed(3)}
-                    </div>
+                    <div className="mb-1 text-sm font-semibold text-slate-900">{predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].name}</div>
+                    {/* Price in Cents */}
+                    <div className="text-2xl font-bold text-slate-900">{formatCents(predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].price)}c</div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <div className="mb-3 text-xs font-medium text-slate-600">All Fuel Types on {format(selectedDate, 'MMM dd')}</div>
                   {predictionResult.fuelComparisons.map((fuel: any, index: number) => (
-                    <div 
-                      key={fuel.id}
-                      className={cn(
-                        "flex items-center justify-between rounded-lg border p-3",
-                        fuel.id === selectedFuel.id ? "border-2 border-slate-900 bg-slate-50" : "border-slate-200 bg-white"
-                      )}
-                    >
+                    <div key={fuel.id} className={cn("flex items-center justify-between rounded-lg border p-3", fuel.id === selectedFuel.id ? "border-2 border-slate-900 bg-slate-50" : "border-slate-200 bg-white")}>
                       <div className="flex items-center gap-3">
-                        <div className={cn("flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold", 
-                          fuel.id === selectedFuel.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
-                        )}>
-                          {index + 1}
-                        </div>
+                        <div className={cn("flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold", fuel.id === selectedFuel.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600")}>{index + 1}</div>
                         <span className="font-medium text-slate-900">{fuel.name}</span>
                       </div>
-                      <span className="font-bold text-slate-900">${fuel.price.toFixed(3)}</span>
+                      {/* Price in Cents */}
+                      <span className="font-bold text-slate-900">{formatCents(fuel.price)}c</span>
                     </div>
                   ))}
                 </div>
@@ -959,27 +924,24 @@ export default function GuessMyGas() {
                   <h3 className="mb-3 text-sm font-semibold text-slate-700">Optimal Fill-Up Time</h3>
                   <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6">
                     <div className="mb-3 flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-emerald-600" />
-                        <span className="font-bold text-emerald-900">Best Time to Fill Up</span>
-                      </div>
+                      {/* ... */}
                       <div className="rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white">
+                        {/* Savings we keep in Dollars as it's a total amount */}
                         Save $4.50
                       </div>
                     </div>
 
                     <div className="mb-2">
-                      <div className="text-xl font-bold text-emerald-900">
-                        {format(addDays(selectedDate, 2), 'EEEE, MMM dd')}
-                      </div>
+                      <div className="text-xl font-bold text-emerald-900">{format(addDays(selectedDate, 2), 'EEEE, MMM dd')}</div>
                       <div className="text-sm font-medium text-emerald-700">Around 6:00 AM</div>
                     </div>
 
                     <div className="flex items-baseline gap-2">
                       <TrendingDown className="h-4 w-4 text-emerald-600" />
                       <span className="text-sm font-medium text-emerald-900">Predicted price:</span>
+                      {/* Predicted Price in Cents */}
                       <span className="text-lg font-bold text-emerald-900">
-                        ${(predictionResult.current.price - 0.08).toFixed(3)}/litre
+                        {formatCents(predictionResult.current.price - 0.08)}c/litre
                       </span>
                     </div>
 

@@ -67,7 +67,7 @@ app.get('/api/predict', async (req, res) => {
         const compRows = await getLatestFuelPrices(storeId);
         const comparisons = compRows.map(row => ({
             ean: row.fuel_type_ean,
-            price: row.price_cents / 100
+            price: row.price_cents / 1000
         }));
 
         res.json({
