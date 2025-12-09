@@ -49,6 +49,7 @@ interface Store {
   address: string;
   distance: string;
   coordinates: { lat: number; lng: number };
+  hasFuel: boolean;
 }
 
 // --- Australian Constants (Melbourne) ---
@@ -304,15 +305,18 @@ export default function GuessMyGas() {
       const lng = userLocation?.lng || 144.9631;
       
       try {
-        const res = await fetch(`${API_BASE}/api/stores?search=${searchQuery}&lat=${lat}&lng=${lng}`);
+        // Fetch stores from API and pass fuelEan for filtering
+        const res = await fetch(`${API_BASE}/api/stores?search=${searchQuery}&lat=${lat}&lng=${lng}&fuelEan=${selectedFuel.ean}`);
         const data = await res.json();
         
         if (Array.isArray(data)) {
             setStores(data);
 
-            const currentSelectionExistsInNewList = selectedStore && data.find(s => s.id === selectedStore.id);
-            if (data.length > 0 && !currentSelectionExistsInNewList) {
-                setSelectedStore(data[0]);
+            const currentSelectionValid = selectedStore && data.find(s => s.id === selectedStore.id);
+            if (data.length > 0 && !currentSelectionValid) {
+                // Find the first store that actually has fuel
+                const validStore = data.find(s => s.hasFuel);
+                if (validStore) setSelectedStore(validStore);
             }
         }
       } catch (err) {
@@ -322,7 +326,7 @@ export default function GuessMyGas() {
 
     const timeoutId = setTimeout(() => fetchStores(), 300);
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, userLocation, selectedStore]);
+  }, [searchQuery, userLocation, selectedStore, selectedFuel]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-16 font-sans text-slate-900">
@@ -496,6 +500,14 @@ export default function GuessMyGas() {
                             <Navigation className="h-2 w-2 md:h-3 md:w-3" />
                             <span>{store.distance} away</span>
                           </div>
+
+                          {/* --- RED WARNING MESSAGE --- */}
+                          {!store.hasFuel && (
+                            <div className="mt-2 flex items-center gap-1 text-[10px] md:text-xs font-bold text-red-600">
+                                <AlertCircle className="h-3 w-3" />
+                                <span>Note: {selectedFuel.name} is not available at this store</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                       {isSelected && (
@@ -669,7 +681,9 @@ export default function GuessMyGas() {
                 <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-1.5 md:px-4 md:py-2">
                   <div className="h-1.5 w-1.5 md:h-2 md:w-2 rounded-full bg-emerald-500" />
                   <span className="text-xs md:text-sm text-slate-700">
-                    Confidence: <span className="font-bold text-slate-900">87%</span>
+                    Prediction confidence: <span className="font-bold text-slate-900">
+                      {metrics ? `${metrics.accuracy}%` : "Calculating..."}
+                    </span>
                   </span>
                 </div>
               </div>

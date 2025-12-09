@@ -134,21 +134,28 @@ function deg2rad(deg) {
 
 // --- Store Search Endpoint ---
 app.get('/api/stores', (req, res) => {
-    const { search, lat, lng } = req.query;
+    const { search, lat, lng, fuelEan } = req.query;
     
     // Default to Melbourne CBD if user denies location
     const userLat = parseFloat(lat) || -37.8136; 
     const userLng = parseFloat(lng) || 144.9631; 
 
-    // 1. Base Query
-    let query = "SELECT * FROM stores WHERE is_fuel_store = 1";
-    let params = [];
+    // SQL: Select store details AND check if price history exists for this specific fuel
+    let query = `
+        SELECT s.*, 
+        (SELECT COUNT(*) FROM prices p WHERE p.store_id = s.store_id AND p.fuel_type_ean = ?) as has_fuel
+        FROM stores s 
+        WHERE s.is_fuel_store = 1
+    `;
+    
+    // The first parameter: fuelEan for the subquery
+    let params = [fuelEan]; 
 
-    // 2. Add Search Filter if provided
+    // Add Search Filter if provided
     if (search) {
-        query += " AND (name LIKE ? OR address LIKE ? OR suburb LIKE ? OR postcode LIKE ?)";
+        query += " AND (s.name LIKE ? OR s.address LIKE ? OR s.suburb LIKE ? OR s.postcode LIKE ?)";
         const term = `%${search}%`;
-        params = [term, term, term, term];
+        params.push(term, term, term, term);
     }
 
     db.all(query, params, (err, rows) => {
@@ -157,24 +164,36 @@ app.get('/api/stores', (req, res) => {
             return res.status(500).json({ error: "Database error" });
         }
 
-        // 3. Calculate Distance for every store found
+        // Calculate Distance
         const storesWithDist = rows.map(store => {
             const dist = getDistanceFromLatLonInKm(userLat, userLng, store.lat, store.lng);
             return {
                 id: store.store_id,
                 name: store.name,
-                // Format: "123 Main St, Suburb 3000"
                 address: `${store.address}, ${store.suburb} ${store.postcode}`, 
                 distance: `${dist.toFixed(1)} km`,
-                rawDistance: dist, // used for sorting
-                coordinates: { lat: store.lat, lng: store.lng }
+                rawDistance: dist,
+                coordinates: { lat: store.lat, lng: store.lng },
+                hasFuel: store.has_fuel > 0 // Boolean: True if this store sells the fuel
             };
         });
 
-        // 4. Sort by Nearest and take top 4
+        // Sort by Nearest
         storesWithDist.sort((a, b) => a.rawDistance - b.rawDistance);
         
-        res.json(storesWithDist.slice(0, 4));
+        // --- LOGIC: Filtering vs Warning ---
+        // If searching: Return everything (we will warn in UI).
+        // If locating (no search term): Only return stores that HAVE the fuel.
+        let finalResults;
+        if (search) {
+            // Return top 4 matches, regardless of fuel (UI handles the red text)
+            finalResults = storesWithDist.slice(0, 4);
+        } else {
+            // Filter strictly: Only show stores that actually sell the selected fuel
+            finalResults = storesWithDist.filter(s => s.hasFuel).slice(0, 4);
+        }
+        
+        res.json(finalResults);
     });
 });
 
