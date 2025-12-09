@@ -10,7 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, ReferenceDot 
 } from 'recharts';
-import { format, addDays, subDays, setHours, set } from 'date-fns';
+import { format, addDays, subDays, setHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import logo from '../public/pwa-512x512.png';
@@ -149,7 +149,6 @@ export default function GuessMyGas() {
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [alertPrice, setAlertPrice] = useState(1.85);
-  const [alertMethod, setAlertMethod] = useState<'email' | 'sms'>('email');
 
   // Model selection state
   const [selectedModel, setSelectedModel] = useState<'linear' | 'polynomial' | 'random_forest'>('linear');
@@ -929,7 +928,7 @@ export default function GuessMyGas() {
                       </h4>
                       <p className={cn("text-[10px] md:text-xs", alertsEnabled ? "text-emerald-700" : "text-slate-600")}>
                         {alertsEnabled 
-                          ? `You'll be notified via ${alertMethod} when price drops below $${alertPrice.toFixed(2)}/litre`
+                          ? `You'll be notified via Email when price drops below $${alertPrice.toFixed(2)}/litre`
                           : "Configure alerts to get notified when prices drop"
                         }
                       </p>
