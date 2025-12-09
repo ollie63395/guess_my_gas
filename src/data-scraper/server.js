@@ -138,7 +138,9 @@ app.get('/api/stores', (req, res) => {
     
     // Default to Melbourne CBD if user denies location
     const userLat = parseFloat(lat) || -37.8136; 
-    const userLng = parseFloat(lng) || 144.9631; 
+    const userLng = parseFloat(lng) || 144.9631;
+
+    console.log(`🔎 Searching: Fuel EAN ${fuelEan} near ${userLat}, ${userLng}`);
 
     // SQL: Select store details AND check if price history exists for this specific fuel
     let query = `
@@ -163,6 +165,8 @@ app.get('/api/stores', (req, res) => {
             console.error(err);
             return res.status(500).json({ error: "Database error" });
         }
+
+        console.log(`   Found ${rows.length} total stores in DB.`);
 
         // Calculate Distance
         const storesWithDist = rows.map(store => {
@@ -192,6 +196,15 @@ app.get('/api/stores', (req, res) => {
             // Filter strictly: Only show stores that actually sell the selected fuel
             finalResults = storesWithDist.filter(s => s.hasFuel).slice(0, 4);
         }
+
+        // --- DEBUG LOG ---
+        if (finalResults.length === 0) {
+            console.log("   ⚠️ Result is empty! Checking why...");
+            const nearest = storesWithDist.slice(0, 3);
+            console.log("   Nearest stores to you (and their fuel status):");
+            nearest.forEach(s => console.log(`   - ${s.name}: ${s.hasFuel ? "HAS FUEL" : "NO FUEL DATA"} (${s.distance})`));
+        }
+        // -----------------
         
         res.json(finalResults);
     });
