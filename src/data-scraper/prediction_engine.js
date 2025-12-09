@@ -55,6 +55,44 @@ const preprocessData = (rawData) => {
     return cleanData;
 };
 
+// --- Helper: Calculate Accuracy ---
+const calculateAccuracy = (model, cleanData) => {
+    if (!model || cleanData.length < 7) {
+        // Not enough data to judge accuracy
+        return { accuracy: 0, correctCount: 0, avgDiff: 0 };
+    }
+
+    // Test against the last 7 available data points
+    const testSet = cleanData.slice(-7);
+    let totalDiff = 0;
+    let correctCount = 0; // "Correct" = within 5 cents
+
+    testSet.forEach(day => {
+        const inputDate = new Date(day.price_date);
+        
+        // We ask the model to predict this PAST date
+        const predicted = model.predict(inputDate); // Returns Dollars (1.899)
+        const actual = day.price_cents / 1000;      // Convert DB cents to Dollars
+
+        const diff = Math.abs(predicted - actual);
+        totalDiff += diff;
+
+        if (diff <= 0.05) correctCount++; // Within 5 cents
+    });
+
+    const avgDiff = totalDiff / testSet.length;
+    // Simple accuracy formula: (1 - error_rate) * 100
+    // If avg price is $1.90 and avgDiff is $0.02, error is ~1% -> Accuracy 99%
+    const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / testSet.length;
+    const accuracy = Math.max(0, Math.min(100, (1 - (avgDiff / avgPrice)) * 100));
+
+    return {
+        accuracy: Math.round(accuracy),
+        correctCount,
+        avgDiff: avgDiff.toFixed(3)
+    };
+};
+
 // --- 2. Model Strategies ---
 class LinearRegressionModel {
     constructor() { this.model = null; }
@@ -163,6 +201,8 @@ const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear'
     // 2. ATTEMPT TRAINING (with try/catch inside classes)
     const isTrained = strategy.train(cleanData);
 
+    const accuracyMetrics = calculateAccuracy(strategy, cleanData);
+
     // --- FALLBACK LOGIC (When not enough data or training failed) ---
     if (!isTrained || cleanData.length === 0) {
         // Fallback to Linear if Poly failed? Or just basic average?
@@ -185,7 +225,10 @@ const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear'
         return cleanData[cleanData.length - 1].price_cents / 1000;
     }
 
-    return predicted;
+    return {
+        price: Number.isFinite(predicted) ? predicted : 1.85,
+        metrics: accuracyMetrics
+    };
 };
 
 module.exports = { makePrediction };

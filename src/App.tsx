@@ -10,7 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, ReferenceDot 
 } from 'recharts';
-import { format, addDays, subDays, setHours } from 'date-fns';
+import { format, addDays, subDays, setHours, set } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import logo from '../public/pwa-512x512.png';
@@ -66,7 +66,7 @@ const FUEL_TYPES: FuelType[] = [
   },
   {
     id: 'p95',
-    ean: '55', // NEW: Premium 95
+    ean: '55', 
     name: 'PULP',
     octane: 'Mobil Extra 95',
     icon: Gauge,
@@ -106,7 +106,7 @@ const FUEL_TYPES: FuelType[] = [
   },
   {
     id: 'lpg',
-    ean: '54', // NEW: LPG
+    ean: '54', 
     name: 'LPG',
     octane: 'AutoGas LPG',
     icon: Wind,
@@ -160,6 +160,10 @@ export default function GuessMyGas() {
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [isLocating, setIsLocating] = useState(false);
 
+  // Alert preferences state
+  const [email, setEmail] = useState(''); // New State
+  const [metrics, setMetrics] = useState<any>(null); // To store accuracy data
+
   // Derived pricing values for safer rendering
   const currentPrice = typeof predictionResult?.current?.price === 'number' ? predictionResult.current.price : null;
   const prevPrice = typeof predictionResult?.prev?.price === 'number' ? predictionResult.prev.price : null;
@@ -185,6 +189,7 @@ export default function GuessMyGas() {
       );
       
       const data = await response.json();
+      setMetrics(data.metrics); // Store accuracy metrics
 
       if (!response.ok) throw new Error("Failed to fetch data");
 
@@ -219,6 +224,29 @@ export default function GuessMyGas() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 3. Save Alert
+  const handleSaveAlert = async () => {
+      if (!email.includes('@')) return alert("Please enter a valid email");
+      
+      try {
+          const res = await fetch(`${API_BASE}/api/alerts`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  email,
+                  storeId: selectedStore?.id,
+                  fuelEan: selectedFuel.ean,
+                  threshold: alertPrice // 1.85
+              })
+          });
+          if (res.ok) {
+              alert("Alert saved! We will email you when prices drop.");
+              setIsAlertModalOpen(false);
+              setAlertsEnabled(true);
+          }
+      } catch (e) { console.error(e); alert("Failed to save alert"); }
   };
 
   const getThemeColors = (theme: string) => {
@@ -283,11 +311,7 @@ export default function GuessMyGas() {
         if (Array.isArray(data)) {
             setStores(data);
 
-            // AUTO-SELECT LOGIC:
-            // If we found stores AND (nothing is currently selected OR the currently selected store isn't in the new list)
-            // Then select the first (closest) store automatically.
             const currentSelectionExistsInNewList = selectedStore && data.find(s => s.id === selectedStore.id);
-            
             if (data.length > 0 && !currentSelectionExistsInNewList) {
                 setSelectedStore(data[0]);
             }
@@ -306,29 +330,29 @@ export default function GuessMyGas() {
       
       {/* 1. Header Section */}
       <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-start px-6 py-6 gap-4">
-          <img src={logo} alt="GuessMyGas Logo" className="h-10 w-10" />
+        <div className="mx-auto flex max-w-7xl items-center justify-start px-4 py-4 md:px-6 md:py-6 gap-3 md:gap-4">
+          <img src={logo} alt="GuessMyGas Logo" className="h-8 w-8 md:h-10 md:w-10" />
           <div className="flex flex-col items-start">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">GuessMyGas</h1>
-            <p className="text-sm font-medium text-slate-600">Accurate fuel price predictions powered by data</p>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">GuessMyGas</h1>
+            <p className="text-xs md:text-sm font-medium text-slate-600">Accurate fuel price predictions</p>
           </div>
-          <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.4)]" />
-            <span className="text-sm font-semibold text-slate-600">7-Eleven</span>
+          <div className="ml-auto flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5">
+            <div className="h-1.5 w-1.5 md:h-2 md:w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.4)]" />
+            <span className="text-xs md:text-sm font-semibold text-slate-600">7-Eleven</span>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
         
         {/* 2. Main Configuration Panel */}
-        <Card className="mb-8 p-8 shadow-sm">
-          <h2 className="mb-6 text-xl font-bold text-slate-900">Configure Your Prediction</h2>
+        <Card className="mb-6 p-4 md:mb-8 md:p-8 shadow-sm">
+          <h2 className="mb-4 text-lg md:text-xl font-bold text-slate-900">Configure Your Prediction</h2>
 
           {/* Fuel Type Selection */}
-          <div className="mb-8">
-            <h3 className="mb-4 text-sm font-semibold text-slate-700">Select Fuel Type</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mb-6 md:mb-8">
+            <h3 className="mb-3 text-xs md:text-sm font-semibold text-slate-700">Select Fuel Type</h3>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
               {FUEL_TYPES.map((fuel) => {
                 const isSelected = selectedFuel.id === fuel.id;
                 const theme = getThemeColors(fuel.theme);
@@ -339,27 +363,27 @@ export default function GuessMyGas() {
                     key={fuel.id}
                     onClick={() => setSelectedFuel(fuel)}
                     className={cn(
-                      "group relative cursor-pointer rounded-xl border-2 p-6 transition-all",
+                      "group relative cursor-pointer rounded-xl border-2 p-3 md:p-6 transition-all",
                       isSelected 
                         ? "border-slate-900 bg-slate-50 shadow-md" 
                         : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-md"
                     )}
                   >
                     {isSelected && (
-                      <div className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-white">
-                        <Check className="h-4 w-4" />
+                      <div className="absolute right-2 top-2 md:right-3 md:top-3 flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full bg-slate-900 text-white">
+                        <Check className="h-3 w-3 md:h-4 md:w-4" />
                       </div>
                     )}
                     
                     <div className={cn(
-                      "mb-4 inline-flex rounded-lg p-3 transition-colors",
+                      "mb-2 md:mb-4 inline-flex rounded-lg p-2 md:p-3 transition-colors",
                       isSelected ? "bg-slate-900 text-white" : `${theme.bg} ${theme.text}`
                     )}>
-                      <Icon className="h-6 w-6" />
+                      <Icon className="h-5 w-5 md:h-6 md:w-6" />
                     </div>
                     
-                    <div className="font-bold text-slate-900 mb-1">{fuel.name}</div>
-                    <div className="text-sm text-slate-600">{fuel.octane}</div>
+                    <div className="text-sm font-bold text-slate-900 md:text-base md:mb-1">{fuel.name}</div>
+                    <div className="text-[10px] md:text-sm text-slate-600 truncate">{fuel.octane}</div>
                   </div>
                 );
               })}
@@ -367,18 +391,18 @@ export default function GuessMyGas() {
           </div>
 
           {/* Date & Time Selection */}
-          <div className="mb-8">
-            <h3 className="mb-4 text-sm font-semibold text-slate-700">Choose Date & Time</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex w-full items-center gap-3 rounded-xl border-2 border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                  <CalendarIcon className="h-5 w-5" />
+          <div className="mb-6 md:mb-8">
+            <h3 className="mb-3 text-xs md:text-sm font-semibold text-slate-700">Choose Date & Time</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex w-full items-center gap-3 rounded-xl border-2 border-slate-200 bg-white p-3 md:p-4 transition-all hover:border-slate-300 hover:shadow-sm">
+                <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <CalendarIcon className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-500">Date</span>
+                <div className="flex flex-col flex-1">
+                  <span className="text-[10px] md:text-xs font-medium text-slate-500">Date</span>
                   <input 
                     type="date" 
-                    className="bg-transparent font-medium text-slate-900 focus:outline-none"
+                    className="w-full bg-transparent text-sm md:text-base font-medium text-slate-900 focus:outline-none"
                     value={format(selectedDate, 'yyyy-MM-dd')}
                     onChange={(e) => setSelectedDate(new Date(e.target.value))}
                     min={format(new Date(), 'yyyy-MM-dd')}
@@ -386,14 +410,14 @@ export default function GuessMyGas() {
                 </div>
               </div>
 
-              <div className="flex w-full items-center gap-3 rounded-xl border-2 border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                  <Clock className="h-5 w-5" />
+              <div className="flex w-full items-center gap-3 rounded-xl border-2 border-slate-200 bg-white p-3 md:p-4 transition-all hover:border-slate-300 hover:shadow-sm">
+                <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <Clock className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
                 <div className="flex flex-col w-full">
-                  <span className="text-xs font-medium text-slate-500">Time</span>
+                  <span className="text-[10px] md:text-xs font-medium text-slate-500">Time</span>
                   <select 
-                    className="w-full bg-transparent font-medium text-slate-900 focus:outline-none cursor-pointer"
+                    className="w-full bg-transparent text-sm md:text-base font-medium text-slate-900 focus:outline-none cursor-pointer"
                     value={selectedTime}
                     onChange={(e) => setSelectedTime(Number(e.target.value))}
                   >
@@ -407,26 +431,26 @@ export default function GuessMyGas() {
           </div>
 
           {/* Store Selection Section */}
-          <div className="mb-8">
-            <h3 className="mb-4 text-sm font-semibold text-slate-700">Select Store</h3>
+          <div className="mb-6 md:mb-8">
+            <h3 className="mb-3 text-xs md:text-sm font-semibold text-slate-700">Select Store</h3>
             
             {/* Search Bar & Locate Button */}
-            <div className="mb-4 flex gap-2">
+            <div className="mb-3 flex gap-2 md:mb-4">
               <div className="relative flex-1">
                 <input
                   type="text"
                   placeholder="Search by name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-10 pr-4 text-sm font-medium transition-all focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-9 pr-3 text-base font-medium transition-all focus:border-slate-900 focus:outline-none md:pl-10 md:pr-4"
                 />
-                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 md:h-5 md:w-5 -translate-y-1/2 text-slate-400" />
               </div>
               
               <button
                 onClick={handleLocateMe}
                 disabled={isLocating}
-                className="flex items-center justify-center rounded-xl border-2 border-slate-200 bg-white px-4 text-slate-600 transition-all hover:border-slate-900 hover:text-slate-900 active:scale-95 disabled:opacity-50"
+                className="flex items-center justify-center rounded-xl border-2 border-slate-200 bg-white px-3 md:px-4 text-slate-600 transition-all hover:border-slate-900 hover:text-slate-900 active:scale-95 disabled:opacity-50"
                 title="Use my current location"
               >
                 {isLocating ? (
@@ -437,17 +461,17 @@ export default function GuessMyGas() {
               </button>
             </div>
             
-            {/* Debug/Info Text - Optional, remove later */}
-            <div className="mb-4 text-xs text-slate-400 text-right">
+            {/* Debug/Info Text */}
+            <div className="mb-3 text-[10px] md:text-xs text-slate-400 text-right">
                 {userLocation 
-                  ? `Using location: ${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`
+                  ? `Using location: ${userLocation.lat.toFixed(2)}, ${userLocation.lng.toFixed(2)}`
                   : "Using default location (Melb CBD)"}
             </div>
 
             {/* Store List */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 md:gap-3">
               {stores.length === 0 ? (
-                <div className="py-4 text-center text-sm text-slate-500">
+                <div className="py-4 text-center text-xs md:text-sm text-slate-500">
                   No stores found. Try a different search.
                 </div>
               ) : (
@@ -458,26 +482,26 @@ export default function GuessMyGas() {
                       key={store.id}
                       onClick={() => setSelectedStore(store)}
                       className={cn(
-                        "flex w-full cursor-pointer items-start justify-between rounded-xl border-2 p-4 transition-all",
+                        "flex w-full cursor-pointer items-start justify-between rounded-xl border-2 p-3 md:p-4 transition-all",
                         isSelected 
                           ? "border-slate-900 bg-slate-50 shadow-md" 
                           : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-md"
                       )}
                     >
-                      <div className="flex items-start gap-4">
-                        <MapPin className={cn("mt-1 h-4 w-4", isSelected ? "text-slate-900" : "text-slate-600")} />
+                      <div className="flex items-start gap-3 md:gap-4">
+                        <MapPin className={cn("mt-1 h-3 w-3 md:h-4 md:w-4", isSelected ? "text-slate-900" : "text-slate-600")} />
                         <div>
-                          <div className="font-bold text-slate-900">{store.name}</div>
-                          <div className="mb-2 text-sm text-slate-600">{store.address}</div>
-                          <div className="flex items-center gap-1 text-sm font-medium text-slate-600">
-                            <Navigation className="h-3 w-3" />
+                          <div className="text-sm md:text-base font-bold text-slate-900">{store.name}</div>
+                          <div className="mb-1 text-xs md:text-sm text-slate-600 line-clamp-1">{store.address}</div>
+                          <div className="flex items-center gap-1 text-[10px] md:text-sm font-medium text-slate-600">
+                            <Navigation className="h-2 w-2 md:h-3 md:w-3" />
                             <span>{store.distance} away</span>
                           </div>
                         </div>
                       </div>
                       {isSelected && (
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-white">
-                          <Check className="h-4 w-4" />
+                        <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full bg-slate-900 text-white">
+                          <Check className="h-3 w-3 md:h-4 md:w-4" />
                         </div>
                       )}
                     </div>
@@ -489,27 +513,25 @@ export default function GuessMyGas() {
 
           {/* Model Selection Dropdown */}
           <div className="mb-6">
-            <h3 className="mb-4 text-sm font-semibold text-slate-700">Prediction Model</h3>
+            <h3 className="mb-3 text-xs md:text-sm font-semibold text-slate-700">Prediction Model</h3>
             
             <div className="relative">
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value as any)}
-                className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white py-4 pl-4 pr-12 text-lg font-medium text-slate-900 transition-all hover:border-slate-300 focus:border-slate-900 focus:outline-none"
+                className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white py-3 pl-3 pr-9 text-base md:py-4 md:pl-4 md:pr-12 md:text-lg font-medium text-slate-900 transition-all hover:border-slate-300 focus:border-slate-900 focus:outline-none"
               >
                 <option value="linear">Linear Regression (Trend Line)</option>
                 <option value="polynomial">Polynomial Regression (Curved)</option>
                 <option value="random_forest">Random Forest (Decision Trees)</option>
               </select>
               
-              {/* Custom Chevron Icon positioned over the select box */}
-              <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
-                <ChevronDown className="h-5 w-5" />
+              <div className="pointer-events-none absolute right-3 md:right-4 top-1/2 -translate-y-1/2 text-slate-500">
+                <ChevronDown className="h-4 w-4 md:h-5 md:w-5" />
               </div>
             </div>
             
-            {/* Helper text to explain the models */}
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-[10px] md:text-xs text-slate-500">
               {selectedModel === 'linear' && "Best for seeing the long-term direction of prices."}
               {selectedModel === 'polynomial' && "Best for capturing price cycles (up and down swings)."}
               {selectedModel === 'random_forest' && "Best for complex patterns, but stays conservative on future dates."}
@@ -520,11 +542,11 @@ export default function GuessMyGas() {
             onClick={handlePredict}
             // Disable if loading OR if no store is selected
             disabled={loading || !selectedStore} 
-            className="w-full rounded-xl bg-slate-900 py-4 text-lg text-white transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full rounded-xl bg-slate-900 py-3 text-base md:py-4 md:text-lg text-white transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? (
               <div className="flex items-center gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" />
+                <Loader2 className="h-4 w-4 md:h-5 md:w-5 animate-spin" />
                 Analyzing Database...
               </div>
             ) : !selectedStore ? (
@@ -541,38 +563,37 @@ export default function GuessMyGas() {
           <div id="results-section" className="animate-in fade-in slide-in-from-bottom-8 duration-700">
             
             {/* Main Prediction Card */}
-            <Card className="mb-8 overflow-hidden border-slate-200 p-8 shadow-sm">
-              <div className="mb-6 flex flex-col justify-between sm:flex-row sm:items-start">
+            <Card className="mb-6 overflow-hidden border-slate-200 p-4 md:mb-8 md:p-8 shadow-sm">
+              <div className="mb-4 flex flex-col justify-between md:mb-6 md:flex-row md:items-start">
                 <div>
-                  <h2 className="mb-2 text-2xl font-bold text-slate-900">Price Prediction</h2>
-                  <p className="text-slate-600">
-                    {format(selectedDate, 'MMMM dd, yyyy')} at {format(setHours(new Date(), selectedTime), 'h:00 a')}
+                  <h2 className="mb-1 text-xl md:text-2xl font-bold text-slate-900">Price Prediction</h2>
+                  <p className="text-xs md:text-base text-slate-600">
+                    {format(selectedDate, 'MMM dd')} at {format(setHours(new Date(), selectedTime), 'h:00 a')}
                   </p>
                 </div>
-                <div className="mt-4 flex flex-col items-end sm:mt-0">
+                <div className="mt-3 md:mt-0 flex flex-col items-end">
                   <div className="flex items-start gap-1">
                     {/* Display Cents (Large) */}
-                    <span className="text-5xl font-bold tracking-tight text-slate-900">
+                    <span className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
                       {formatCents(predictionResult.current.price)}
                     </span>
                     <div className="mt-2 flex flex-col">
-                      <span className="text-xl font-bold">c</span>
-                      <span className="text-xs text-slate-600">/litre</span>
+                      <span className="text-lg md:text-xl font-bold">c</span>
+                      <span className="text-[10px] md:text-xs text-slate-600">/litre</span>
                     </div>
                   </div>
-                  <div className="mt-1 flex items-center gap-1 text-sm font-medium">
+                  <div className="mt-1 flex items-center gap-1 text-xs md:text-sm font-medium">
                     {priceDeltaPrev !== null ? (
                       priceDeltaPrev > 0 ? (
                         <>
-                          <TrendingUp className="h-4 w-4 text-red-600" />
+                          <TrendingUp className="h-3 w-3 md:h-4 md:w-4 text-red-600" />
                           <span className="text-red-600">
-                            {/* Delta in cents */}
                             +{formatCents(priceDeltaPrev)}c (0.8%)
                           </span>
                         </>
                       ) : (
                         <>
-                          <TrendingDown className="h-4 w-4 text-emerald-600" />
+                          <TrendingDown className="h-3 w-3 md:h-4 md:w-4 text-emerald-600" />
                           <span className="text-emerald-600">
                             {formatCents(priceDeltaPrev)}c (-0.5%)
                           </span>
@@ -586,11 +607,11 @@ export default function GuessMyGas() {
               </div>
 
               {/* Interactive Graph */}
-              <div className="h-[320px] w-full">
+              <div className="h-[250px] md:h-[320px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
                     data={predictionResult.history}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                   >
                     <defs>
                       <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
@@ -602,36 +623,35 @@ export default function GuessMyGas() {
                     <XAxis 
                       dataKey="displayDate" 
                       stroke="#64748b" 
-                      fontSize={12} 
-                      tickLine={false}
-                      axisLine={false}
-                      dy={10}
+                      fontSize={10} 
+                      tickLine={false} 
+                      axisLine={false} 
+                      dy={10} 
                     />
                     <YAxis 
                       domain={['dataMin - 0.05', 'dataMax + 0.05']} 
                       stroke="#64748b" 
-                      fontSize={12} 
+                      fontSize={10} 
                       // Format Y-Axis as Cents
                       tickFormatter={(value: number) => `${(value * 100).toFixed(0)}c`}
                       tickLine={false}
                       axisLine={false}
-                      dx={-10}
+                      width={30}
                     />
                     <Tooltip 
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload;
                           return (
-                            <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                              <p className="mb-1 font-bold text-slate-900">{data.fullDate}</p>
-                              {/* Tooltip in Cents */}
-                              <p className="text-slate-700">{formatCents(data.price)}c/litre</p>
+                            <div className="rounded-lg border border-slate-200 bg-white p-2 md:p-3 shadow-lg">
+                              <p className="mb-1 font-bold text-slate-900 text-xs md:text-sm">{data.fullDate}</p>
+                              <p className="text-xs md:text-sm text-slate-700">{formatCents(data.price)}c/litre</p>
                               {/* New Badge */}
                               <span className={cn(
-                                "mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
+                                "mt-1 inline-block rounded px-1 py-0.5 text-[8px] md:text-[10px] font-bold uppercase",
                                 data.isReal ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
                               )}>
-                                {data.isReal ? "Actual Data" : "Projection"}
+                                {data.isReal ? "Actual" : "Projection"}
                               </span>
                             </div>
                           );
@@ -639,72 +659,70 @@ export default function GuessMyGas() {
                         return null;
                       }}
                     />
-                    <Line type="monotone" dataKey="price" stroke="#0f172a" strokeWidth={3} dot={{ r: 4, fill: "#0f172a", stroke: "#fff", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#0f172a", stroke: "#fff", strokeWidth: 3 }} />
-                    <ReferenceDot x={predictionResult.current.displayDate} y={currentPrice ?? 0} r={8} fill="#0f172a" stroke="#fff" strokeWidth={3} />
+                    <Line type="monotone" dataKey="price" stroke="#0f172a" strokeWidth={2} dot={{ r: 3, fill: "#0f172a", stroke: "#fff", strokeWidth: 2 }} activeDot={{ r: 5, fill: "#0f172a", stroke: "#fff", strokeWidth: 3 }} />
+                    <ReferenceDot x={predictionResult.current.displayDate} y={currentPrice ?? 0} r={6} fill="#0f172a" stroke="#fff" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
               
               {/* Prediction Confidence */}
-              <div className="mt-6 flex justify-center">
-                <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2">
-                  <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                  <span className="text-sm text-slate-700">
-                    Prediction confidence: <span className="font-bold text-slate-900">87%</span>
+              <div className="mt-4 md:mt-6 flex justify-center">
+                <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-1.5 md:px-4 md:py-2">
+                  <div className="h-1.5 w-1.5 md:h-2 md:w-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs md:text-sm text-slate-700">
+                    Confidence: <span className="font-bold text-slate-900">87%</span>
                   </span>
                 </div>
               </div>
             </Card>
 
             {/* Secondary Insights Grid */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
               
               {/* Neighboring Days */}
-              <Card className="p-6">
-                <h3 className="mb-4 text-lg font-bold text-slate-900">Neighboring Days</h3>
-                <div className="space-y-3">
+              <Card className="p-4 md:p-6">
+                <h3 className="mb-3 text-base md:text-lg font-bold text-slate-900">Neighboring Days</h3>
+                <div className="space-y-2 md:space-y-3">
                   
                   {/* Previous */}
-                  <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 md:p-4">
                     <div>
-                      <div className="text-xs font-medium text-slate-600">Previous Day</div>
-                      <div className="font-bold text-slate-900">{format(subDays(selectedDate, 1), 'MMM dd, yyyy')}</div>
+                      <div className="text-[10px] md:text-xs font-medium text-slate-600">Previous Day</div>
+                      <div className="text-sm md:text-base font-bold text-slate-900">{format(subDays(selectedDate, 1), 'MMM dd')}</div>
                     </div>
                     <div className="text-right">
                       {/* Price in Cents */}
-                      <div className="text-2xl font-bold text-slate-900">{formatCents(prevPrice)}c</div>
+                      <div className="text-lg md:text-2xl font-bold text-slate-900">{formatCents(prevPrice)}c</div>
                       {prevPrice !== null && currentPrice !== null && (
-                        <div className={cn("text-xs flex items-center justify-end gap-1", prevPrice < currentPrice ? "text-emerald-600" : "text-red-600")}>
-                          {prevPrice < currentPrice ? (<>Cheaper <TrendingDown className="h-3 w-3" /></>) : (<>Higher <TrendingUp className="h-3 w-3" /></>)}
+                        <div className={cn("text-[10px] md:text-xs flex items-center justify-end gap-1", prevPrice < currentPrice ? "text-emerald-600" : "text-red-600")}>
+                          {prevPrice < currentPrice ? (<>Cheaper <TrendingDown className="h-3 w-3 md:h-4 md:w-4" /></>) : (<>Higher <TrendingUp className="h-3 w-3 md:h-4 md:w-4" /></>)}
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Selected */}
-                  <div className="flex items-center justify-between rounded-lg border-2 border-slate-900 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between rounded-lg border-2 border-slate-900 bg-slate-50 p-3 md:p-4">
                     <div>
-                      <div className="text-xs font-medium text-slate-600">Selected Date</div>
-                      <div className="font-bold text-slate-900">{format(selectedDate, 'MMM dd, yyyy')}</div>
+                      <div className="text-[10px] md:text-xs font-medium text-slate-600">Selected Date</div>
+                      <div className="text-sm md:text-base font-bold text-slate-900">{format(selectedDate, 'MMM dd')}</div>
                     </div>
                     <div className="text-right">
-                      {/* Price in Cents */}
-                      <div className="text-2xl font-bold text-slate-900">{formatCents(currentPrice)}c</div>
+                      <div className="text-lg md:text-2xl font-bold text-slate-900">{formatCents(currentPrice)}c</div>
                     </div>
                   </div>
 
                   {/* Next */}
-                  <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 md:p-4">
                     <div>
-                      <div className="text-xs font-medium text-slate-600">Next Day</div>
-                      <div className="font-bold text-slate-900">{format(addDays(selectedDate, 1), 'MMM dd, yyyy')}</div>
+                      <div className="text-[10px] md:text-xs font-medium text-slate-600">Next Day</div>
+                      <div className="text-sm md:text-base font-bold text-slate-900">{format(addDays(selectedDate, 1), 'MMM dd')}</div>
                     </div>
                     <div className="text-right">
-                      {/* Price in Cents */}
-                      <div className="text-2xl font-bold text-slate-900">{formatCents(nextPrice)}c</div>
+                      <div className="text-lg md:text-2xl font-bold text-slate-900">{formatCents(nextPrice)}c</div>
                       {nextPrice !== null && currentPrice !== null && (
-                        <div className={cn("text-xs flex items-center justify-end gap-1", nextPrice < currentPrice ? "text-emerald-600" : "text-red-600")}>
-                          {nextPrice < currentPrice ? (<>Cheaper <TrendingDown className="h-3 w-3" /></>) : (<>Higher <TrendingUp className="h-3 w-3" /></>)}
+                        <div className={cn("text-[10px] md:text-xs flex items-center justify-end gap-1", nextPrice < currentPrice ? "text-emerald-600" : "text-red-600")}>
+                          {nextPrice < currentPrice ? (<>Cheaper <TrendingDown className="h-3 w-3 md:h-4 md:w-4" /></>) : (<>Higher <TrendingUp className="h-3 w-3 md:h-4 md:w-4" /></>)}
                         </div>
                       )}
                     </div>
@@ -713,90 +731,93 @@ export default function GuessMyGas() {
               </Card>
 
               {/* Fuel Comparison */}
-              <Card className="p-6">
-                <h3 className="mb-4 text-lg font-bold text-slate-900">Fuel Type Comparison</h3>
-                <div className="mb-6 grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                    <div className="mb-2 flex items-center gap-1 text-xs font-bold text-emerald-700">
-                      <Award className="h-4 w-4" /> Cheapest
+              <Card className="p-4 md:p-6">
+                <h3 className="mb-3 text-base md:text-lg font-bold text-slate-900">Fuel Type Comparison</h3>
+                <div className="mb-4 md:mb-6 grid grid-cols-2 gap-2 md:gap-3">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 md:p-4">
+                    <div className="mb-1 md:mb-2 flex items-center gap-1 text-[10px] md:text-xs font-bold text-emerald-700">
+                      <Award className="h-3 w-3 md:h-4 md:w-4" /> Cheapest
                     </div>
-                    <div className="mb-1 text-sm font-semibold text-slate-900">{predictionResult.fuelComparisons[0].name}</div>
-                    {/* Price in Cents */}
-                    <div className="text-2xl font-bold text-slate-900">{formatCents(predictionResult.fuelComparisons[0].price)}c</div>
+                    <div className="mb-1 text-xs md:text-sm font-semibold text-slate-900 truncate">{predictionResult.fuelComparisons[0].name}</div>
+                    <div className="text-lg md:text-2xl font-bold text-slate-900">{formatCents(predictionResult.fuelComparisons[0].price)}c</div>
                   </div>
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-                    <div className="mb-2 flex items-center gap-1 text-xs font-bold text-red-700">
-                      <AlertCircle className="h-4 w-4" /> Most Expensive
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 md:p-4">
+                    <div className="mb-1 md:mb-2 flex items-center gap-1 text-[10px] md:text-xs font-bold text-red-700">
+                      <AlertCircle className="h-3 w-3 md:h-4 md:w-4" /> Expensive
                     </div>
-                    <div className="mb-1 text-sm font-semibold text-slate-900">{predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].name}</div>
-                    {/* Price in Cents */}
-                    <div className="text-2xl font-bold text-slate-900">{formatCents(predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].price)}c</div>
+                    <div className="mb-1 text-xs md:text-sm font-semibold text-slate-900 truncate">{predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].name}</div>
+                    <div className="text-lg md:text-2xl font-bold text-slate-900">{formatCents(predictionResult.fuelComparisons[predictionResult.fuelComparisons.length - 1].price)}c</div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="mb-3 text-xs font-medium text-slate-600">All Fuel Types on {format(selectedDate, 'MMM dd')}</div>
+                  <div className="mb-2 md:mb-3 text-[10px] md:text-xs font-medium text-slate-600">All Fuel Types on {format(selectedDate, 'MMM dd')}</div>
                   {predictionResult.fuelComparisons.map((fuel: any, index: number) => (
-                    <div key={fuel.id} className={cn("flex items-center justify-between rounded-lg border p-3", fuel.id === selectedFuel.id ? "border-2 border-slate-900 bg-slate-50" : "border-slate-200 bg-white")}>
-                      <div className="flex items-center gap-3">
-                        <div className={cn("flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold", fuel.id === selectedFuel.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600")}>{index + 1}</div>
-                        <span className="font-medium text-slate-900">{fuel.name}</span>
+                    <div key={fuel.id} className={cn("flex items-center justify-between rounded-lg border p-2 md:p-3", fuel.id === selectedFuel.id ? "border-2 border-slate-900 bg-slate-50" : "border-slate-200 bg-white")}>
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <div className={cn("flex h-6 w-6 md:h-8 md:w-8 items-center justify-center rounded-full text-[10px] md:text-xs font-bold", fuel.id === selectedFuel.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600")}>{index + 1}</div>
+                        <span className="text-sm md:text-base font-medium text-slate-900">{fuel.name}</span>
                       </div>
-                      {/* Price in Cents */}
-                      <span className="font-bold text-slate-900">{formatCents(fuel.price)}c</span>
+                      <span className="text-sm md:text-base font-bold text-slate-900">{formatCents(fuel.price)}c</span>
                     </div>
                   ))}
                 </div>
               </Card>
 
               {/* Historical Accuracy */}
-              <Card className="p-6">
-                <div className="mb-6 flex items-center justify-between">
+              <Card className="p-4 md:p-6">
+                <div className="mb-4 md:mb-6 flex items-center justify-between">
                   <div>
-                    <h3 className="mb-1 text-lg font-bold text-slate-900">Historical Accuracy</h3>
-                    <p className="text-xs text-slate-600">Past 7 days prediction performance</p>
+                    <h3 className="mb-1 text-base md:text-lg font-bold text-slate-900">Historical Accuracy</h3>
+                    <p className="text-[10px] md:text-xs text-slate-600">Past 7 days prediction performance</p>
                   </div>
-                  <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-emerald-900">
-                    <Target className="h-4 w-4 text-emerald-600" />
-                    <span className="text-sm font-bold">87% accurate</span>
+                  <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 md:px-4 md:py-2 text-emerald-900">
+                    <Target className="h-3 w-3 md:h-4 md:w-4 text-emerald-600" />
+                    <span className="text-xs md:text-sm font-bold">
+                      {metrics ? `${metrics.accuracy}% accurate` : "Calculating..."}
+                    </span>
                   </div>
                 </div>
 
-                <div className="mb-6 grid grid-cols-2 gap-4">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
-                    <div className="mb-1 text-xs font-medium text-slate-600">Accurate Predictions</div>
-                    <div className="text-2xl font-bold text-slate-900">7/7</div>
-                    <div className="mt-1 text-[10px] text-slate-600">Within ±5c</div>
+                <div className="mb-4 md:mb-6 grid grid-cols-2 gap-3 md:gap-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:p-4 text-center">
+                    <div className="mb-1 text-[10px] md:text-xs font-medium text-slate-600">Accurate Predictions</div>
+                    <div className="text-xl md:text-2xl font-bold text-slate-900">
+                      {metrics ? `${metrics.correctCount}/7` : "-/7"}
+                    </div>
+                    <div className="mt-1 text-[8px] md:text-[10px] text-slate-600">Within ±5c</div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
-                    <div className="mb-1 text-xs font-medium text-slate-600">Avg. Difference</div>
-                    <div className="text-2xl font-bold text-slate-900">±0.017c</div>
-                    <div className="mt-1 text-[10px] text-slate-600">Per prediction</div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:p-4 text-center">
+                    <div className="mb-1 text-[10px] md:text-xs font-medium text-slate-600">Avg. Difference</div>
+                    <div className="text-xl md:text-2xl font-bold text-slate-900">
+                      {metrics ? `±${metrics.avgDiff}` : "±0.00"}
+                    </div>
+                    <div className="mt-1 text-[8px] md:text-[10px] text-slate-600">Per prediction</div>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="mb-3 text-xs font-semibold text-slate-700">Recent Predictions</h4>
+                  <h4 className="mb-2 md:mb-3 text-[10px] md:text-xs font-semibold text-slate-700">Recent Predictions</h4>
                   <div className="space-y-2">
                     {[1, 2, 3, 4, 5].map((i) => {
                       const date = subDays(new Date(), i);
                       const isAccurate = i !== 4; // Mock one inaccurate
                       return (
-                        <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
-                          <div className="flex items-center gap-3">
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 md:p-3">
+                          <div className="flex items-center gap-2 md:gap-3">
                             {isAccurate ? (
-                              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                              <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
                             ) : (
-                              <XCircle className="h-5 w-5 text-amber-600" />
+                              <XCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
                             )}
                             <div>
-                              <div className="text-xs font-bold text-slate-900">{format(date, 'MMM dd, yyyy')}</div>
-                              <div className="text-[10px] text-slate-500">
+                              <div className="text-[10px] md:text-xs font-bold text-slate-900">{format(date, 'MMM dd, yyyy')}</div>
+                              <div className="text-[8px] md:text-[10px] text-slate-500">
                                 Predicted: ${isAccurate ? '2.145' : '2.145'} • Actual: ${isAccurate ? '2.148' : '2.180'}
                               </div>
                             </div>
                           </div>
-                          <div className={cn("text-xs font-medium", isAccurate ? "text-emerald-600" : "text-amber-600")}>
+                          <div className={cn("text-[10px] md:text-xs font-medium", isAccurate ? "text-emerald-600" : "text-amber-600")}>
                             {isAccurate ? "Accurate" : "±3.5c"}
                           </div>
                         </div>
@@ -805,11 +826,11 @@ export default function GuessMyGas() {
                   </div>
                 </div>
 
-                <div className="mt-6 flex items-start gap-3 rounded-xl bg-blue-50 p-4">
-                  <TrendingUp className="mt-0.5 h-5 w-5 text-blue-600" />
+                <div className="mt-4 md:mt-6 flex items-start gap-2 md:gap-3 rounded-xl bg-blue-50 p-3 md:p-4">
+                  <TrendingUp className="mt-0.5 h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                   <div>
-                    <h4 className="mb-1 text-sm font-bold text-blue-900">Building Trust Through Transparency</h4>
-                    <p className="text-xs text-blue-700">
+                    <h4 className="mb-1 text-xs md:text-sm font-bold text-blue-900">Building Trust Through Transparency</h4>
+                    <p className="text-[10px] md:text-xs text-blue-700">
                       Our predictions are based on historical data, market trends, and machine learning models. We continuously improve our accuracy by learning from past predictions.
                     </p>
                   </div>
@@ -817,44 +838,46 @@ export default function GuessMyGas() {
               </Card>
 
               {/* Price Alerts & Optimization */}
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-4 md:gap-6">
                 {/* Price Alerts Card */}
-                <Card className="flex-1 p-6">
-                  <div className="mb-6 flex items-center justify-between">
+                <Card className="flex-1 p-4 md:p-6">
+                  <div className="mb-4 md:mb-6 flex items-center justify-between">
                     <div>
-                      <h3 className="mb-1 text-lg font-bold text-slate-900">Price Alerts</h3>
-                      <p className="text-xs text-slate-600">Get notified when prices drop</p>
+                      <h3 className="mb-1 text-base md:text-lg font-bold text-slate-900">Price Alerts</h3>
+                      <p className="text-[10px] md:text-xs text-slate-600">Get notified when prices drop</p>
                     </div>
                     <Button 
                       onClick={() => setIsAlertModalOpen(!isAlertModalOpen)}
-                      className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs text-white hover:bg-slate-800"
+                      className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 md:px-4 py-1.5 md:py-2 text-[10px] md:text-xs text-white hover:bg-slate-800"
                     >
-                      <Bell className="h-4 w-4" /> Configure Alerts
+                      <Bell className="h-3 w-3 md:h-4 md:w-4" /> Configure Alerts
                     </Button>
                   </div>
 
                   {/* Inline Alert Configuration */}
                   {isAlertModalOpen && (
-                    <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 animate-in slide-in-from-top-2">
-                      <div className="mb-4 flex items-center justify-between">
+                    <div className="mb-4 md:mb-6 rounded-xl border border-slate-200 bg-slate-50 p-3 md:p-4 animate-in slide-in-from-top-2">
+                      <div className="mb-3 md:mb-4 flex items-center justify-between">
                         <div>
-                          <span className="font-bold text-slate-900">Enable Alerts</span>
-                          <p className="text-xs text-slate-600">Receive notifications when price drops</p>
+                          <span className="font-bold text-slate-900 text-sm md:text-base">Enable Alerts</span>
+                          <p className="text-[10px] md:text-xs text-slate-600">Receive notifications when price drops</p>
                         </div>
                         <div 
-                          className={cn("h-6 w-11 cursor-pointer rounded-full p-1 transition-colors", alertsEnabled ? "bg-slate-900" : "bg-slate-200")}
+                          className={cn("h-5 w-9 md:h-6 md:w-11 cursor-pointer rounded-full p-1 transition-colors", alertsEnabled ? "bg-slate-900" : "bg-slate-200")}
                           onClick={() => setAlertsEnabled(!alertsEnabled)}
                         >
-                          <div className={cn("h-4 w-4 rounded-full bg-white transition-transform", alertsEnabled ? "translate-x-5" : "translate-x-0")} />
+                          <div className={cn("h-3 w-3 md:h-4 md:w-4 rounded-full bg-white transition-transform", alertsEnabled ? "translate-x-4 md:translate-x-5" : "translate-x-0")} />
                         </div>
                       </div>
 
                       {alertsEnabled && (
                         <div className="animate-in fade-in">
+
+                          {/* ALERT PRICE SLIDER */}
                           <div className="mb-4">
-                            <label className="mb-3 block text-sm font-medium text-slate-900">Alert me when price drops below</label>
-                            <div className="mb-3 text-center">
-                              <span className="text-3xl font-bold text-slate-900">${alertPrice.toFixed(2)}</span>
+                            <label className="mb-2 md:mb-3 block text-xs md:text-sm font-medium text-slate-900">Alert me when price drops below</label>
+                            <div className="mb-2 md:mb-3 text-center">
+                              <span className="text-2xl md:text-3xl font-bold text-slate-900">${alertPrice.toFixed(2)}</span>
                               <span className="text-slate-600">/litre</span>
                             </div>
                             <input 
@@ -866,48 +889,45 @@ export default function GuessMyGas() {
                               onChange={(e) => setAlertPrice(Number(e.target.value))}
                               className="w-full accent-slate-900"
                             />
-                            <div className="mt-2 flex justify-between text-xs text-slate-500">
+                            <div className="mt-2 flex justify-between text-[10px] md:text-xs text-slate-500">
                               <span>$1.50</span>
                               <span>$2.50</span>
                             </div>
                           </div>
 
+                          {/* EMAIL INPUT */}
                           <div className="mb-4">
-                            <label className="mb-3 block text-sm font-medium text-slate-900">Notification Method</label>
-                            <div className="grid grid-cols-2 gap-3">
-                              {['email', 'sms'].map((method) => (
-                                <button
-                                  key={method}
-                                  onClick={() => setAlertMethod(method as 'email' | 'sms')}
-                                  className={cn("rounded-lg border-2 p-3 text-sm font-medium uppercase transition-all", 
-                                    alertMethod === method ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-200 bg-white text-slate-500"
-                                  )}
-                                >
-                                  {method}
-                                </button>
-                              ))}
-                            </div>
+                              <label className="mb-2 block text-xs md:text-sm font-medium text-slate-900">
+                                  Email Address
+                              </label>
+                              <input 
+                                  type="email" 
+                                  placeholder="you@example.com"
+                                  value={email}
+                                  onChange={(e) => setEmail(e.target.value)}
+                                  className="w-full rounded-lg border-2 border-slate-200 p-2 text-sm focus:border-slate-900 focus:outline-none"
+                              />
                           </div>
 
-                          <Button onClick={() => setIsAlertModalOpen(false)} className="w-full gap-2 bg-slate-900 text-white hover:bg-slate-800">
-                            <Check className="h-4 w-4" /> Save Preferences
+                          <Button onClick={handleSaveAlert} className="w-full gap-2 bg-slate-900 text-white hover:bg-slate-800">
+                            <Check className="h-8 w-4" /> Save Preferences
                           </Button>
                         </div>
                       )}
                     </div>
                   )}
 
-                  <div className={cn("flex items-start gap-3 rounded-xl p-4", alertsEnabled ? "bg-emerald-50" : "bg-slate-50")}>
+                  <div className={cn("flex items-start gap-2 md:gap-3 rounded-xl p-3 md:p-4", alertsEnabled ? "bg-emerald-50" : "bg-slate-50")}>
                     {alertsEnabled ? (
-                      <Bell className="mt-0.5 h-5 w-5 text-emerald-600" />
+                      <Bell className="mt-0.5 h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
                     ) : (
-                      <BellOff className="mt-0.5 h-5 w-5 text-slate-600" />
+                      <BellOff className="mt-0.5 h-4 w-4 md:h-5 md:w-5 text-slate-600" />
                     )}
                     <div>
-                      <h4 className={cn("mb-1 text-sm font-bold", alertsEnabled ? "text-emerald-900" : "text-slate-900")}>
+                      <h4 className={cn("mb-1 text-xs md:text-sm font-bold", alertsEnabled ? "text-emerald-900" : "text-slate-900")}>
                         {alertsEnabled ? "Alerts Active" : "Alerts Disabled"}
                       </h4>
-                      <p className={cn("text-xs", alertsEnabled ? "text-emerald-700" : "text-slate-600")}>
+                      <p className={cn("text-[10px] md:text-xs", alertsEnabled ? "text-emerald-700" : "text-slate-600")}>
                         {alertsEnabled 
                           ? `You'll be notified via ${alertMethod} when price drops below $${alertPrice.toFixed(2)}/litre`
                           : "Configure alerts to get notified when prices drop"
@@ -920,34 +940,33 @@ export default function GuessMyGas() {
                 {/* Optimal Fill-Up Time */}
                 <div className="flex-1">
                   <h3 className="mb-3 text-sm font-semibold text-slate-700">Optimal Fill-Up Time</h3>
-                  <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6">
-                    <div className="mb-3 flex items-start justify-between">
+                  <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 md:p-6">
+                    <div className="mb-2 md:mb-3 flex items-start justify-between">
                       <div className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-emerald-600" />
-                        <span className="font-bold text-emerald-900">Best Time to Fill Up</span>
+                        <Clock className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
+                        <span className="font-bold text-emerald-900 text-sm md:text-base">Best Time to Fill Up</span>
                       </div>
-                      <div className="rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white">
+                      <div className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] md:text-[10px] font-bold text-white">
                         Save $4.50
                       </div>
                     </div>
 
                     <div className="mb-2">
-                      <div className="text-xl font-bold text-emerald-900">
+                      <div className="text-base md:text-xl font-bold text-emerald-900">
                         {format(addDays(selectedDate, 2), 'EEEE, MMM dd')}
                       </div>
-                      <div className="text-sm font-medium text-emerald-700">Around 6:00 AM</div>
+                      <div className="text-xs md:text-sm font-medium text-emerald-700">Around 6:00 AM</div>
                     </div>
 
                     <div className="flex items-baseline gap-2">
-                      <TrendingDown className="h-4 w-4 text-emerald-600" />
-                      <span className="text-sm font-medium text-emerald-900">Predicted price:</span>
-                      {/* Predicted Price in Cents */}
-                      <span className="text-lg font-bold text-emerald-900">
+                      <TrendingDown className="h-3 w-3 md:h-4 md:w-4 text-emerald-600" />
+                      <span className="text-xs md:text-sm font-medium text-emerald-900">Predicted price:</span>
+                      <span className="text-base md:text-lg font-bold text-emerald-900">
                         {formatCents(predictionResult.current.price - 0.08)}c/litre
                       </span>
                     </div>
 
-                    <p className="mt-3 text-xs text-emerald-700">
+                    <p className="mt-2 md:mt-3 text-[10px] md:text-xs text-emerald-700">
                       Based on historical patterns, prices are typically lowest on this day and time. Savings based on a 50L tank.
                     </p>
                   </div>
@@ -961,10 +980,10 @@ export default function GuessMyGas() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-16 border-t border-slate-200 bg-white py-6">
-        <div className="mx-auto max-w-7xl px-6 text-center text-sm text-slate-600">
+      <footer className="mt-8 border-t border-slate-200 bg-white py-4 md:mt-16 md:py-6">
+        <div className="mx-auto max-w-7xl px-4 text-center text-xs text-slate-600 md:px-6 md:text-sm">
           <p>Predictions are estimates based on historical data and trends. Actual prices may vary.</p>
-          <p className="mt-2 text-xs text-slate-400">© 2025 GuessMyGas Australia. All rights reserved.</p>
+          <p className="mt-1 text-[10px] text-slate-400 md:mt-2 md:text-xs">© 2025 GuessMyGas Australia. All rights reserved.</p>
         </div>
       </footer>
 

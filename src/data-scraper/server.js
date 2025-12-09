@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3001;
 const DB_FILE = path.join(__dirname, 'fuel_prices.db');
 
 app.use(cors()); // Allow React (localhost:5173) to talk to us
+app.use(express.json()); 
 
 const db = new sqlite3.Database(DB_FILE);
 
@@ -33,12 +34,36 @@ const getLatestFuelPrices = (storeId) => {
     });
 };
 
+// --- Save Alert Endpoint ---
+app.post('/api/alerts', (req, res) => {
+    const { email, storeId, fuelEan, threshold } = req.body;
+    
+    if (!email || !storeId || !fuelEan || !threshold) {
+        return res.status(400).json({ error: "Missing fields" });
+    }
+
+    // threshold comes in Dollars (1.85), DB stores cents (185)
+    const thresholdCents = Math.round(threshold * 100);
+
+    const stmt = db.prepare(`INSERT INTO alerts (email, store_id, fuel_ean, threshold_cents) VALUES (?, ?, ?, ?)`);
+    stmt.run(email, storeId, fuelEan, thresholdCents, function(err) {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Failed to save alert" });
+        }
+        res.json({ success: true, id: this.lastID });
+    });
+    stmt.finalize();
+});
+
 // --- Prediction Endpoint ---
 app.get('/api/predict', async (req, res) => {
     try {
         // You can now accept ?model=linear in the URL
         const { storeId, fuelEan, targetDate, model = 'linear' } = req.query;
         const target = new Date(targetDate);
+        
+        let predictionMetrics = null;
 
         // 1. Generate 15-Day History/Forecast
         // Range: 7 days before -> 7 days after
@@ -54,11 +79,15 @@ app.get('/api/predict', async (req, res) => {
             // - If it's in the future, it uses Linear Regression formula (y = mx + b)
             const predictedPrice = await makePrediction(storeId, fuelEan, date, model);
 
+            const result = await makePrediction(storeId, fuelEan, date, model);
+            const priceVal = typeof result === 'object' ? result.price : result;
+            if (typeof result === 'object' && result.metrics) predictionMetrics = result.metrics;
+
             history.push({
                 date: date,
                 displayDate: format(date, 'MMM dd'),
                 fullDate: format(date, 'MMM dd, yyyy'),
-                price: predictedPrice,
+                price: priceVal,
                 isTarget: i === 0,
                 // We mark it as "Real" if it's in the past (simplified logic for UI)
                 isReal: i <= 0 
@@ -76,7 +105,8 @@ app.get('/api/predict', async (req, res) => {
             modelUsed: model,
             history,
             current: history.find(h => h.isTarget),
-            fuelComparisons: comparisons
+            fuelComparisons: comparisons,
+            metrics: predictionMetrics
         });
 
     } catch (error) {

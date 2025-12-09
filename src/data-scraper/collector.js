@@ -1,6 +1,7 @@
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
+const nodemailer = require('nodemailer');
 const fs = require('fs');
 
 // --- Configuration ---
@@ -44,6 +45,17 @@ const FUEL_PRICE_URL_BASE = 'https://www.7eleven.com.au/storelocator-retail/mule
 // --- Database Setup ---
 const db = new sqlite3.Database(DB_FILE);
 
+// --- Email Setup ---
+const createTransporter = async () => {
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: 'ollie.guessmygas@gmail.com',
+            pass: process.env.GMAIL_APP_PASSWORD
+        }
+    });
+};
+
 function initDB() {
     db.serialize(() => {
         // 1. Stores Table (Existing)
@@ -86,8 +98,56 @@ function initDB() {
             FOREIGN KEY(store_id) REFERENCES stores(store_id),
             FOREIGN KEY(fuel_type_ean) REFERENCES fuel_ref(ean)
         )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,
+            store_id TEXT,
+            fuel_ean TEXT,
+            threshold_cents INTEGER,
+            last_sent_at TEXT
+        )`);
         
         console.log("Database initialized with Fuel Reference map.");
+    });
+}
+
+// --- Alert Checking Logic ---
+async function checkAlerts() {
+    console.log("Checking alerts against new prices...");
+    
+    // 1. Get all active alerts
+    db.all("SELECT * FROM alerts", async (err, alerts) => {
+        if (err || !alerts || alerts.length === 0) return;
+
+        const transporter = await createTransporter();
+
+        alerts.forEach(alert => {
+            // 2. Get latest price for this alert's store/fuel
+            db.get(
+                `SELECT price_cents FROM prices WHERE store_id = ? AND fuel_type_ean = ? ORDER BY retrieved_at DESC LIMIT 1`,
+                [alert.store_id, alert.fuel_ean],
+                async (err, row) => {
+                    if (row && row.price_cents <= alert.threshold_cents) {
+                        // 3. Price is LOW! Send Email.
+                        console.log(`✅ ALERT TRIGGERED: ${alert.email} - Price ${row.price_cents} <= ${alert.threshold_cents}`);
+                        
+                        try {
+                            const info = await transporter.sendMail({
+                                from: '"GuessMyGas" <alerts@guessmygas.com>',
+                                to: alert.email,
+                                subject: "📉 Price Drop Alert! Time to Fill Up",
+                                text: `Good news! Fuel at your selected store has dropped to ${(row.price_cents/100).toFixed(1)}c/litre. This is below your threshold.`
+                            });
+                            console.log("📧 Email sent: %s", info.messageId);
+                            console.log("   Preview URL: %s", nodemailer.getTestMessageUrl(info));
+                        } catch (e) {
+                            console.error("Failed to send email", e);
+                        }
+                    }
+                }
+            );
+        });
     });
 }
 
@@ -135,12 +195,13 @@ async function fetchAndStoreData() {
                     stmtStore.finalize();
                     stmtPrice.finalize();
                     console.log(`Data collection finished.`);
+
+                    await checkAlerts(); 
                     resolve();
 
                 } catch (e) { reject(e); }
             });
         });
-
     } catch (error) { console.error("Critical Error:", error.message); }
 }
 
