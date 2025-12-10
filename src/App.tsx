@@ -832,7 +832,7 @@ export default function GuessMyGas() {
                               </div>
                               <div className="text-[8px] md:text-[10px] text-slate-500">
                                 {/* Convert Dollars to Cents for display */}
-                                Pred: {formatCents(day.predicted)}c • Act: {formatCents(day.actual)}c
+                                Predicted: {formatCents(day.predicted)}c • Actual: {formatCents(day.actual)}c
                               </div>
                             </div>
                           </div>
