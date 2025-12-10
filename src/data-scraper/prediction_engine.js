@@ -57,13 +57,19 @@ const preprocessData = (rawData) => {
 
 // --- Helper: Calculate Accuracy ---
 const calculateAccuracy = (model, cleanData) => {
-    if (!model || cleanData.length < 7) {
+    if (!model || cleanData.length < 2) {
         // Not enough data to judge accuracy
-        return { accuracy: 0, correctCount: 0, avgDiff: 0 };
+        return { accuracy: 0, correctCount: 0, avgDiff: 0, totalCount: cleanData.length  };
     }
 
-    // Test against the last 7 available data points
-    const testSet = cleanData.slice(-7);
+    // Look back up to 30 days. 
+    // If we have 100 days, we test the last 30.
+    // If we have 10 days, we test all 10.
+    const TEST_WINDOW = 30;
+    const daysToTest = Math.min(cleanData.length, TEST_WINDOW);
+
+    // Slice the last N days
+    const testSet = cleanData.slice(-daysToTest);
     let totalDiff = 0;
     let correctCount = 0; // "Correct" = within 5 cents
 
@@ -83,12 +89,13 @@ const calculateAccuracy = (model, cleanData) => {
     const avgDiff = totalDiff / testSet.length;
     // Simple accuracy formula: (1 - error_rate) * 100
     // If avg price is $1.90 and avgDiff is $0.02, error is ~1% -> Accuracy 99%
-    const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / testSet.length;
+    const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / testSet.length || 1.85;
     const accuracy = Math.max(0, Math.min(100, (1 - (avgDiff / avgPrice)) * 100));
 
     return {
         accuracy: Math.round(accuracy),
-        correctCount,
+        correctCount: correctCount,
+        totalCount: daysToTest,
         avgDiff: avgDiff.toFixed(3)
     };
 };

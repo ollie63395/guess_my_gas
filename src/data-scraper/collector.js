@@ -181,8 +181,9 @@ async function fetchAndStoreData() {
                             if (store.isFuelStore) {
                                 try {
                                     const priceRes = await axios.get(`https://www.7eleven.com.au/storelocator-retail/mulesoft/fuelPrices?storeNo=${store.storeId}`);
-                                    const prices = priceRes.data.data;
-                                    if (prices) {
+                                    let prices = priceRes.data;
+                                    if (prices && prices.data) prices = prices.data; 
+                                    if (Array.isArray(prices)) {
                                         for (const p of prices) {
                                             stmtPrice.run(p.storeNo, p.ean, p.price, p.priceDate, timestamp);
                                         }

@@ -782,7 +782,11 @@ export default function GuessMyGas() {
                 <div className="mb-4 md:mb-6 flex items-center justify-between">
                   <div>
                     <h3 className="mb-1 text-base md:text-lg font-bold text-slate-900">Historical Accuracy</h3>
-                    <p className="text-[10px] md:text-xs text-slate-600">Past 7 days prediction performance</p>
+                    <p className="text-[10px] md:text-xs text-slate-600">
+                      {metrics 
+                        ? `Performance over the last ${metrics.totalCount} days` 
+                        : "Analyzing historical performance..."}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 md:px-4 md:py-2 text-emerald-900">
                     <Target className="h-3 w-3 md:h-4 md:w-4 text-emerald-600" />
@@ -796,7 +800,7 @@ export default function GuessMyGas() {
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:p-4 text-center">
                     <div className="mb-1 text-[10px] md:text-xs font-medium text-slate-600">Accurate Predictions</div>
                     <div className="text-xl md:text-2xl font-bold text-slate-900">
-                      {metrics ? `${metrics.correctCount}/7` : "-/7"}
+                      {metrics ? `${metrics.correctCount}/${metrics.totalCount}` : "-/7"}
                     </div>
                     <div className="mt-1 text-[8px] md:text-[10px] text-slate-600">Within ±5c</div>
                   </div>

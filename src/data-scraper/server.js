@@ -59,7 +59,6 @@ app.post('/api/alerts', (req, res) => {
 // --- Prediction Endpoint ---
 app.get('/api/predict', async (req, res) => {
     try {
-        // You can now accept ?model=linear in the URL
         const { storeId, fuelEan, targetDate, model = 'linear' } = req.query;
         const target = new Date(targetDate);
         
@@ -71,14 +70,6 @@ app.get('/api/predict', async (req, res) => {
         
         for (let i = -7; i <= 7; i++) {
             const date = addDays(target, i);
-            const dateStr = format(date, 'yyyy-MM-dd');
-
-            // ASK THE ENGINE FOR THE PRICE
-            // The engine handles the logic: 
-            // - If it's in the past/present, it might align with training data
-            // - If it's in the future, it uses Linear Regression formula (y = mx + b)
-            const predictedPrice = await makePrediction(storeId, fuelEan, date, model);
-
             const result = await makePrediction(storeId, fuelEan, date, model);
             const priceVal = typeof result === 'object' ? result.price : result;
             if (typeof result === 'object' && result.metrics) predictionMetrics = result.metrics;
