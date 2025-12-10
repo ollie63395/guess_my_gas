@@ -782,16 +782,17 @@ export default function GuessMyGas() {
                 <div className="mb-4 md:mb-6 flex items-center justify-between">
                   <div>
                     <h3 className="mb-1 text-base md:text-lg font-bold text-slate-900">Historical Accuracy</h3>
-                    <p className="text-[10px] md:text-xs text-slate-600">
-                      {metrics 
-                        ? `Performance over the last ${metrics.totalCount} days` 
-                        : "Analyzing historical performance..."}
-                    </p>
+                    <p className="text-[10px] md:text-xs text-slate-600">Past 7 days performance</p>
                   </div>
                   <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 md:px-4 md:py-2 text-emerald-900">
                     <Target className="h-3 w-3 md:h-4 md:w-4 text-emerald-600" />
                     <span className="text-xs md:text-sm font-bold">
-                      {metrics ? `${metrics.accuracy}% accurate` : "Calculating..."}
+                      {loading 
+                        ? "Calculating..." 
+                        : metrics 
+                          ? `${metrics.accuracy}% accurate` 
+                          : "N/A"
+                      }
                     </span>
                   </div>
                 </div>
@@ -800,7 +801,7 @@ export default function GuessMyGas() {
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:p-4 text-center">
                     <div className="mb-1 text-[10px] md:text-xs font-medium text-slate-600">Accurate Predictions</div>
                     <div className="text-xl md:text-2xl font-bold text-slate-900">
-                      {metrics ? `${metrics.correctCount}/${metrics.totalCount}` : "-/7"}
+                      {!loading && metrics ? `${metrics.correctCount}/${metrics.totalCount}` : "-/7"}
                     </div>
                     <div className="mt-1 text-[8px] md:text-[10px] text-slate-600">Within ±5c</div>
                   </div>
@@ -814,32 +815,37 @@ export default function GuessMyGas() {
                 </div>
 
                 <div>
-                  <h4 className="mb-2 md:mb-3 text-[10px] md:text-xs font-semibold text-slate-700">Recent Predictions</h4>
+                  <h4 className="mb-2 md:mb-3 text-[10px] md:text-xs font-semibold text-slate-700">Recent Predictions (Real Data)</h4>
                   <div className="space-y-2">
-                    {[1, 2, 3, 4, 5].map((i) => {
-                      const date = subDays(new Date(), i);
-                      const isAccurate = i !== 4; // Mock one inaccurate
-                      return (
+                    {!loading && metrics && metrics.details && metrics.details.length > 0 ? (
+                      metrics.details.map((day: any, i: number) => (
                         <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 md:p-3">
                           <div className="flex items-center gap-2 md:gap-3">
-                            {isAccurate ? (
+                            {day.isCorrect ? (
                               <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
                             ) : (
                               <XCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
                             )}
                             <div>
-                              <div className="text-[10px] md:text-xs font-bold text-slate-900">{format(date, 'MMM dd, yyyy')}</div>
+                              <div className="text-[10px] md:text-xs font-bold text-slate-900">
+                                {format(new Date(day.date), 'MMM dd')}
+                              </div>
                               <div className="text-[8px] md:text-[10px] text-slate-500">
-                                Predicted: ${isAccurate ? '2.145' : '2.145'} • Actual: ${isAccurate ? '2.148' : '2.180'}
+                                {/* Convert Dollars to Cents for display */}
+                                Pred: {formatCents(day.predicted)}c • Act: {formatCents(day.actual)}c
                               </div>
                             </div>
                           </div>
-                          <div className={cn("text-[10px] md:text-xs font-medium", isAccurate ? "text-emerald-600" : "text-amber-600")}>
-                            {isAccurate ? "Accurate" : "±3.5c"}
+                          <div className={cn("text-[10px] md:text-xs font-medium", day.isCorrect ? "text-emerald-600" : "text-amber-600")}>
+                            {day.isCorrect ? "Accurate" : `±${(day.diff * 100).toFixed(1)}c`}
                           </div>
                         </div>
-                      )
-                    })}
+                      ))
+                    ) : (
+                      <div className="text-[10px] text-slate-400 italic py-2 text-center">
+                        {loading ? "Loading history..." : "Not enough historical data collected yet."}
+                      </div>
+                    )}
                   </div>
                 </div>
 
