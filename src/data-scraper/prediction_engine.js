@@ -57,46 +57,57 @@ const preprocessData = (rawData) => {
 
 // --- Helper: Calculate Accuracy ---
 const calculateAccuracy = (model, cleanData) => {
-    if (!model || cleanData.length < 2) {
-        // Not enough data to judge accuracy
-        return { accuracy: 0, correctCount: 0, avgDiff: 0, totalCount: cleanData.length  };
+
+    // 1. Prepare variables
+    const TEST_WINDOW = 7;
+    const details = []; // Stores the day-by-day breakdown
+    let totalDiff = 0;
+    let correctCount = 0;
+    
+    // 2. We need the last 7 days of REAL data
+    // If we have less, we take what we have.
+    const daysAvailable = cleanData.length;
+    const daysToTest = Math.min(daysAvailable, TEST_WINDOW);
+    
+    // If absolutely no data, return empty structure
+    if (!model || daysAvailable === 0) {
+        return { accuracy: 0, correctCount: 0, totalCount: 7, avgDiff: 0, details: [] };
     }
 
-    // Look back up to 30 days. 
-    // If we have 100 days, we test the last 30.
-    // If we have 10 days, we test all 10.
-    const TEST_WINDOW = 30;
-    const daysToTest = Math.min(cleanData.length, TEST_WINDOW);
-
-    // Slice the last N days
     const testSet = cleanData.slice(-daysToTest);
-    let totalDiff = 0;
-    let correctCount = 0; // "Correct" = within 5 cents
 
+    // 3. Evaluate each day
     testSet.forEach(day => {
         const inputDate = new Date(day.price_date);
-        
-        // We ask the model to predict this PAST date
-        const predicted = model.predict(inputDate); // Returns Dollars (1.899)
-        const actual = day.price_cents / 1000;      // Convert DB cents to Dollars
+        const predicted = model.predict(inputDate); // Dollars
+        const actual = day.price_cents / 1000;      // Dollars
 
         const diff = Math.abs(predicted - actual);
         totalDiff += diff;
 
-        if (diff <= 0.05) correctCount++; // Within 5 cents
+        const isCorrect = diff <= 0.05; // 5 cent margin
+        if (isCorrect) correctCount++;
+
+        // Add to details list (Newest first will be sorted in UI)
+        details.push({
+            date: day.price_date,
+            predicted: predicted,
+            actual: actual,
+            diff: diff,
+            isCorrect: isCorrect
+        });
     });
 
-    const avgDiff = totalDiff / testSet.length;
-    // Simple accuracy formula: (1 - error_rate) * 100
-    // If avg price is $1.90 and avgDiff is $0.02, error is ~1% -> Accuracy 99%
-    const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / testSet.length || 1.85;
+    const avgDiff = totalDiff / daysToTest;
+    const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / daysToTest || 1.85;
     const accuracy = Math.max(0, Math.min(100, (1 - (avgDiff / avgPrice)) * 100));
 
     return {
         accuracy: Math.round(accuracy),
         correctCount: correctCount,
-        totalCount: daysToTest,
-        avgDiff: avgDiff.toFixed(3)
+        totalCount: 7, // Fixed to 7 as requested
+        avgDiff: avgDiff.toFixed(3),
+        details: details.reverse() // Newest first
     };
 };
 
@@ -222,7 +233,11 @@ const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear'
         const dayOfMonth = new Date(targetDate).getDate();
         const fakeFluctuation = Math.sin(dayOfMonth * 0.5) * 0.05; 
 
-        return Number((basePrice + fakeFluctuation).toFixed(3));
+        const emptyMetrics = calculateAccuracy(null, []); 
+        return { 
+            price: Number((basePrice + fakeFluctuation).toFixed(3)), 
+            metrics: emptyMetrics 
+        };
     }
 
     const predicted = strategy.predict(targetDate);
