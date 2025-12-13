@@ -105,9 +105,9 @@ const calculateAccuracy = (model, cleanData) => {
     return {
         accuracy: Math.round(accuracy),
         correctCount: correctCount,
-        totalCount: 7, // Fixed to 7 as requested
+        totalCount: daysToTest,
         avgDiff: avgDiff.toFixed(3),
-        details: details.reverse() // Newest first
+        details: details.reverse()
     };
 };
 

@@ -1006,7 +1006,7 @@ export default function GuessMyGas() {
                               Best Deal Nearby (10km)
                             </span>
                           </div>
-                          {/* Calculate Savings vs Current Selected Store */}
+                          {/* Calculate Savings */}
                           {currentPrice && (
                             <div className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] md:text-[10px] font-bold text-white">
                               Save approx ${( (currentPrice - recommendation.price) * 50 ).toFixed(2)}
@@ -1014,12 +1014,12 @@ export default function GuessMyGas() {
                           )}
                         </div>
 
-                        {/* Store Details */}
+                        {/* Store Details with New Subtitle */}
                         <div className="mb-3">
-                          <div className="text-base md:text-lg font-bold text-emerald-900">
-                            {recommendation.storeName}
+                          <div className="text-base md:text-lg font-bold text-emerald-900 mt-5 leading-tight">
+                            Store: {recommendation.storeName}
                           </div>
-                          <div className="text-xs text-emerald-700 flex items-center gap-1">
+                          <div className="mt-1 text-xs text-emerald-700 flex items-center gap-1 mb-5 opacity-80">
                             <MapPin className="h-3 w-3" />
                             {recommendation.suburb} ({recommendation.dist}km away)
                           </div>
@@ -1030,7 +1030,9 @@ export default function GuessMyGas() {
                           <div>
                             <div className="text-xs text-emerald-700 font-medium mb-0.5">Best Time:</div>
                             <div className="text-sm md:text-base font-bold text-emerald-900">
-                              {format(new Date(recommendation.date), 'EEEE, MMM dd')}
+                              {/* --- ADDED TIME FORMAT --- */}
+                              {format(new Date(recommendation.date), 'EEE, MMM dd')} at 6:00 AM
+                              {/* ------------------------- */}
                             </div>
                           </div>
                           <div className="text-right">
@@ -1060,10 +1062,10 @@ export default function GuessMyGas() {
       <footer className="mt-8 border-t border-slate-200 bg-white py-4 md:mt-16 md:py-6">
         <div className="mx-auto max-w-7xl px-4 text-center text-xs text-slate-600 md:px-6 md:text-sm">
           <p>Predictions are estimates based on historical data and trends. Actual prices may vary.</p>
-          <p className="mt-1 text-[10px] text-slate-400 md:mt-2 md:text-xs">© 2025 GuessMyGas Australia. All rights reserved.</p>
+          <p className="mt-1 font-medium text-emerald-700">Data is updated every 6 hours.</p>
+          <p className="mt-2 text-[10px] text-slate-400 md:mt-3 md:text-xs">© 2025 GuessMyGas Australia. All rights reserved.</p>
         </div>
       </footer>
-
     </div>
   );
 }
