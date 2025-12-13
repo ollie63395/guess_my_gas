@@ -45,6 +45,9 @@ const FUEL_PRICE_URL_BASE = 'https://www.7eleven.com.au/storelocator-retail/mule
 // --- Database Setup ---
 const db = new sqlite3.Database(DB_FILE);
 
+// Configure SQLite to wait up to 5 seconds if the DB is busy, instead of crashing
+db.configure('busyTimeout', 5000);
+
 // --- Email Setup ---
 const createTransporter = async () => {
     return nodemailer.createTransport({
@@ -58,6 +61,11 @@ const createTransporter = async () => {
 
 function initDB() {
     db.serialize(() => {
+
+        // ENABLE WAL MODE
+        // This allows readers (checkAlerts) and writers (scraper) to work simultaneously
+        db.run("PRAGMA journal_mode = WAL;");
+
         // 1. Stores Table (Existing)
         db.run(`CREATE TABLE IF NOT EXISTS stores (
             store_id TEXT PRIMARY KEY,
@@ -108,7 +116,7 @@ function initDB() {
             last_sent_at TEXT
         )`);
         
-        console.log("Database initialized with Fuel Reference map.");
+        console.log("Database initialized (WAL Mode Enabled).");
     });
 }
 
@@ -213,10 +221,10 @@ initDB();
 // Run immediately on startup
 fetchAndStoreData();
 
-// Schedule to run every 12 hours
-// Cron syntax: "0 */12 * * *" means "At minute 0 past every 12th hour"
-cron.schedule('0 */12 * * *', () => {
+// Schedule to run every 6 hours
+// Cron syntax: "0 */6 * * *" means "At minute 0 past every 6th hour"
+cron.schedule('0 */6 * * *', () => {
     fetchAndStoreData();
 });
 
-console.log("Scheduler started. Will run every 12 hours.");
+console.log("Scheduler started. Will run every 6 hours.");

@@ -164,6 +164,10 @@ export default function GuessMyGas() {
   const [email, setEmail] = useState(''); // New State
   const [metrics, setMetrics] = useState<any>(null); // To store accuracy data
 
+  // Recommendation state
+  const [recommendation, setRecommendation] = useState<any>(null);
+  const [recLoading, setRecLoading] = useState(false);
+
   // Derived pricing values for safer rendering
   const currentPrice = typeof predictionResult?.current?.price === 'number' ? predictionResult.current.price : null;
   const prevPrice = typeof predictionResult?.prev?.price === 'number' ? predictionResult.prev.price : null;
@@ -327,6 +331,29 @@ export default function GuessMyGas() {
     const timeoutId = setTimeout(() => fetchStores(), 300);
     return () => clearTimeout(timeoutId);
   }, [searchQuery, userLocation, selectedStore, selectedFuel]);
+
+  // 3. Fetch Recommendation when Location, Fuel, or Model changes
+  useEffect(() => {
+    const fetchRecommendation = async () => {
+      if (!userLocation) return;
+      setRecLoading(true);
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/recommendation?lat=${userLocation.lat}&lng=${userLocation.lng}&fuelEan=${selectedFuel.ean}&model=${selectedModel}`
+        );
+        const data = await res.json();
+        setRecommendation(data);
+      } catch (e) {
+        console.error("Rec fetch failed", e);
+      } finally {
+        setRecLoading(false);
+      }
+    };
+
+    // Debounce to prevent spamming
+    const timer = setTimeout(fetchRecommendation, 1000);
+    return () => clearTimeout(timer);
+  }, [userLocation, selectedFuel, selectedModel]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-16 font-sans text-slate-900">
@@ -960,38 +987,65 @@ export default function GuessMyGas() {
                   </div>
                 </Card>
 
-                {/* Optimal Fill-Up Time */}
+                {/* Optimal Fill-Up Time (Smart Recommendation) */}
                 <div className="flex-1">
-                  <h3 className="mb-3 text-sm font-semibold text-slate-700">Optimal Fill-Up Time</h3>
-                  <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 md:p-6">
-                    <div className="mb-2 md:mb-3 flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
-                        <span className="font-bold text-emerald-900 text-sm md:text-base">Best Time to Fill Up</span>
+                  <h3 className="mb-3 text-sm font-semibold text-slate-700">Optimal Fill-Up</h3>
+                  <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 md:p-6 transition-all hover:shadow-md">
+                    
+                    {recLoading ? (
+                      <div className="flex flex-col items-center justify-center py-6 text-emerald-800 gap-2">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span className="text-xs">Scanning local stations...</span>
                       </div>
-                      <div className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] md:text-[10px] font-bold text-white">
-                        Save $4.50
+                    ) : recommendation ? (
+                      <>
+                        <div className="mb-2 md:mb-3 flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
+                            <span className="font-bold text-emerald-900 text-sm md:text-base">
+                              Best Deal Nearby (10km)
+                            </span>
+                          </div>
+                          {/* Calculate Savings vs Current Selected Store */}
+                          {currentPrice && (
+                            <div className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] md:text-[10px] font-bold text-white">
+                              Save approx ${( (currentPrice - recommendation.price) * 50 ).toFixed(2)}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Store Details */}
+                        <div className="mb-3">
+                          <div className="text-base md:text-lg font-bold text-emerald-900">
+                            {recommendation.storeName}
+                          </div>
+                          <div className="text-xs text-emerald-700 flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {recommendation.suburb} ({recommendation.dist}km away)
+                          </div>
+                        </div>
+
+                        {/* Date & Price */}
+                        <div className="flex items-end justify-between">
+                          <div>
+                            <div className="text-xs text-emerald-700 font-medium mb-0.5">Best Time:</div>
+                            <div className="text-sm md:text-base font-bold text-emerald-900">
+                              {format(new Date(recommendation.date), 'EEEE, MMM dd')}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs text-emerald-700 font-medium block">Price:</span>
+                            <span className="text-xl md:text-2xl font-bold text-emerald-900">
+                              {formatCents(recommendation.price)}c
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="py-4 text-center text-xs text-emerald-800">
+                        No better deals found nearby.<br/>Check your location settings.
                       </div>
-                    </div>
-
-                    <div className="mb-2">
-                      <div className="text-base md:text-xl font-bold text-emerald-900">
-                        {format(addDays(selectedDate, 2), 'EEEE, MMM dd')}
-                      </div>
-                      <div className="text-xs md:text-sm font-medium text-emerald-700">Around 6:00 AM</div>
-                    </div>
-
-                    <div className="flex items-baseline gap-2">
-                      <TrendingDown className="h-3 w-3 md:h-4 md:w-4 text-emerald-600" />
-                      <span className="text-xs md:text-sm font-medium text-emerald-900">Predicted price:</span>
-                      <span className="text-base md:text-lg font-bold text-emerald-900">
-                        {formatCents(predictionResult.current.price - 0.08)}c/litre
-                      </span>
-                    </div>
-
-                    <p className="mt-2 md:mt-3 text-[10px] md:text-xs text-emerald-700">
-                      Based on historical patterns, prices are typically lowest on this day and time. Savings based on a 50L tank.
-                    </p>
+                    )}
                   </div>
                 </div>
               </div>

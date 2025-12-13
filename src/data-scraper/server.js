@@ -201,6 +201,64 @@ app.get('/api/stores', (req, res) => {
     });
 });
 
+// --- Optimal Recommendation Endpoint ---
+app.get('/api/recommendation', async (req, res) => {
+    const { lat, lng, fuelEan, model = 'linear' } = req.query;
+    
+    const userLat = parseFloat(lat) || -37.8136; 
+    const userLng = parseFloat(lng) || 144.9631;
+
+    // 1. Find stores within 10km
+    const query = `SELECT * FROM stores WHERE is_fuel_store = 1`;
+    
+    db.all(query, [], async (err, rows) => {
+        if (err) return res.status(500).json({ error: "DB Error" });
+
+        // Filter by distance (10km) and sort by distance
+        const nearbyStores = rows.map(store => {
+            const dist = getDistanceFromLatLonInKm(userLat, userLng, store.lat, store.lng);
+            return { ...store, dist };
+        })
+        .filter(s => s.dist <= 10)
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 5); // LIMIT to top 5 stores to keep API fast
+
+        if (nearbyStores.length === 0) return res.json(null);
+
+        let bestOption = null;
+        let minPrice = Infinity;
+
+        // 2. Predict prices for these stores for the next 7 days
+        for (const store of nearbyStores) {
+            const today = new Date();
+            
+            for (let i = 0; i < 7; i++) {
+                const targetDate = addDays(today, i);
+                
+                // We reuse the existing engine
+                // Note: We await sequentially here. In high-scale apps, use Promise.all
+                const result = await makePrediction(store.store_id, fuelEan, targetDate, model);
+                const price = typeof result === 'object' ? result.price : result;
+
+                if (price < minPrice) {
+                    minPrice = price;
+                    bestOption = {
+                        storeName: store.name,
+                        address: store.address,
+                        suburb: store.suburb,
+                        dist: store.dist.toFixed(1),
+                        date: targetDate,
+                        price: price
+                    };
+                }
+            }
+        }
+
+        // Return the absolute winner
+        res.json(bestOption);
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
