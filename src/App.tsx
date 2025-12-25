@@ -1049,7 +1049,7 @@ export default function GuessMyGas() {
                       </>
                     ) : (
                       <div className="py-4 text-center text-xs text-emerald-800">
-                        No better deals found nearby.<br/>Check your location settings.
+                        No better deals found nearby.<br/>Check your location settings (Are you currently in Melbourne?).
                       </div>
                     )}
                   </div>
