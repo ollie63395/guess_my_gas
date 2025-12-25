@@ -809,7 +809,11 @@ export default function GuessMyGas() {
                 <div className="mb-4 md:mb-6 flex items-center justify-between">
                   <div>
                     <h3 className="mb-1 text-base md:text-lg font-bold text-slate-900">Historical Accuracy</h3>
-                    <p className="text-[10px] md:text-xs text-slate-600">Past 7 days performance</p>
+                    <p className="text-[10px] md:text-xs text-slate-600">
+                      {metrics 
+                        ? `Performance over the last ${metrics.totalCount} days`
+                        : "Analyzing historical performance..."}
+                  </p>
                   </div>
                   <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 md:px-4 md:py-2 text-emerald-900">
                     <Target className="h-3 w-3 md:h-4 md:w-4 text-emerald-600" />
