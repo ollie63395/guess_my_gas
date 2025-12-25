@@ -361,7 +361,7 @@ export default function GuessMyGas() {
       {/* 1. Header Section */}
       <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-start px-4 py-4 md:px-6 md:py-6 gap-3 md:gap-4">
-          <img src={logo} alt="GuessMyGas Logo" className="h-8 w-8 md:h-10 md:w-10" />
+          <img src={logo} alt="GuessMyGas Logo" className="h-12 w-12 md:h-10 md:w-10" />
           <div className="flex flex-col items-start">
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">GuessMyGas</h1>
             <p className="text-xs md:text-sm font-medium text-slate-600">Accurate fuel price predictions</p>
