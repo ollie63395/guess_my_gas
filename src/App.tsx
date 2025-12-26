@@ -13,7 +13,7 @@ import {
 import { format, addDays, subDays, setHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import logo from '../public/pwa-192x192.png';
+import logo from '../public/gas-icon-512.png';
 
 // --- API URL ---
 const API_BASE = import.meta.env.VITE_API_URL;
