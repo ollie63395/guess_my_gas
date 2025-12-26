@@ -13,7 +13,7 @@ import {
 import { format, addDays, subDays, setHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import logo from '../public/gas-icon-512.png';
+import logo from '../src/gas-icon-192.png';
 
 // --- API URL ---
 const API_BASE = import.meta.env.VITE_API_URL;
@@ -361,7 +361,7 @@ export default function GuessMyGas() {
       {/* 1. Header Section */}
       <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-start px-4 py-4 md:px-6 md:py-6 gap-3 md:gap-4">
-          <img src={logo} alt="GuessMyGas Logo" className="h-8 w-8 md:h-8 md:w-8" />
+          <img src={logo} alt="GuessMyGas Logo" className="h-10 w-10 md:h-10 md:w-10" />
           <div className="flex flex-col items-start">
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">GuessMyGas</h1>
             <p className="text-xs md:text-sm font-medium text-slate-600">Accurate fuel price predictions</p>
