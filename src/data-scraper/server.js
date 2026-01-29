@@ -1,110 +1,14 @@
 const express = require('express');
 const cors = require('cors');
-require('./collector');
 
-const { addDays, subDays, format, isSameDay, parseISO } = require('date-fns');
+const { addDays, format } = require('date-fns');
 const { makePrediction } = require('./prediction_engine');
-
-const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const DB_FILE = path.join(__dirname, 'fuel_prices.db');
 
 app.use(cors()); // Allow React (localhost:5173) to talk to us
 app.use(express.json()); 
-
-const db = new sqlite3.Database(DB_FILE);
-
-// --- Helper: Get Latest Price for ALL fuels (for comparison) ---
-const getLatestFuelPrices = (storeId) => {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT fuel_type_ean, price_cents 
-            FROM prices 
-            WHERE store_id = ? 
-            GROUP BY fuel_type_ean 
-            HAVING retrieved_at = MAX(retrieved_at)
-        `;
-        db.all(query, [storeId], (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
-    });
-};
-
-// --- Save Alert Endpoint ---
-app.post('/api/alerts', (req, res) => {
-    const { email, storeId, fuelEan, threshold } = req.body;
-    
-    if (!email || !storeId || !fuelEan || !threshold) {
-        return res.status(400).json({ error: "Missing fields" });
-    }
-
-    // threshold comes in Dollars (1.85), DB stores cents (185)
-    const thresholdCents = Math.round(threshold * 100);
-
-    const stmt = db.prepare(`INSERT INTO alerts (email, store_id, fuel_ean, threshold_cents) VALUES (?, ?, ?, ?)`);
-    stmt.run(email, storeId, fuelEan, thresholdCents, function(err) {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ error: "Failed to save alert" });
-        }
-        res.json({ success: true, id: this.lastID });
-    });
-    stmt.finalize();
-});
-
-// --- Prediction Endpoint ---
-app.get('/api/predict', async (req, res) => {
-    try {
-        const { storeId, fuelEan, targetDate, model = 'linear' } = req.query;
-        const target = new Date(targetDate);
-        
-        let predictionMetrics = null;
-
-        // 1. Generate 15-Day History/Forecast
-        // Range: 7 days before -> 7 days after
-        const history = [];
-        
-        for (let i = -7; i <= 7; i++) {
-            const date = addDays(target, i);
-            const result = await makePrediction(storeId, fuelEan, date, model);
-            const priceVal = typeof result === 'object' ? result.price : result;
-            if (typeof result === 'object' && result.metrics) predictionMetrics = result.metrics;
-
-            history.push({
-                date: date,
-                displayDate: format(date, 'MMM dd'),
-                fullDate: format(date, 'MMM dd, yyyy'),
-                price: priceVal,
-                isTarget: i === 0,
-                // We mark it as "Real" if it's in the past (simplified logic for UI)
-                isReal: i <= 0 
-            });
-        }
-
-        // 2. Get Fuel Comparisons (Current prices)
-        const compRows = await getLatestFuelPrices(storeId);
-        const comparisons = compRows.map(row => ({
-            ean: row.fuel_type_ean,
-            price: row.price_cents / 1000
-        }));
-
-        res.json({
-            modelUsed: model,
-            history,
-            current: history.find(h => h.isTarget),
-            fuelComparisons: comparisons,
-            metrics: predictionMetrics
-        });
-
-    } catch (error) {
-        console.error("API Error:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
 
 // --- Helper: Calculate Distance (Haversine Formula) ---
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
@@ -124,43 +28,28 @@ function deg2rad(deg) {
 }
 
 // --- Store Search Endpoint ---
-app.get('/api/stores', (req, res) => {
+app.get('/api/stores', async (req, res) => {
     const { search, lat, lng, fuelEan } = req.query;
-    
-    // Default to Melbourne CBD if user denies location
     const userLat = parseFloat(lat) || -37.8136; 
     const userLng = parseFloat(lng) || 144.9631;
 
-    console.log(`🔎 Searching: Fuel EAN ${fuelEan} near ${userLat}, ${userLng}`);
-
-    // SQL: Select store details AND check if price history exists for this specific fuel
     let query = `
         SELECT s.*, 
         (SELECT COUNT(*) FROM prices p WHERE p.store_id = s.store_id AND p.fuel_type_ean = ?) as has_fuel
         FROM stores s 
         WHERE s.is_fuel_store = 1
     `;
-    
-    // The first parameter: fuelEan for the subquery
-    let params = [fuelEan]; 
+    let args = [fuelEan];
 
-    // Add Search Filter if provided
     if (search) {
         query += " AND (s.name LIKE ? OR s.address LIKE ? OR s.suburb LIKE ? OR s.postcode LIKE ?)";
         const term = `%${search}%`;
-        params.push(term, term, term, term);
+        args.push(term, term, term, term);
     }
 
-    db.all(query, params, (err, rows) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ error: "Database error" });
-        }
-
-        console.log(`   Found ${rows.length} total stores in DB.`);
-
-        // Calculate Distance
-        const storesWithDist = rows.map(store => {
+    try {
+        const result = await client.execute({ sql: query, args });
+        const storesWithDist = result.rows.map(store => {
             const dist = getDistanceFromLatLonInKm(userLat, userLng, store.lat, store.lng);
             return {
                 id: store.store_id,
@@ -169,74 +58,119 @@ app.get('/api/stores', (req, res) => {
                 distance: `${dist.toFixed(1)} km`,
                 rawDistance: dist,
                 coordinates: { lat: store.lat, lng: store.lng },
-                hasFuel: store.has_fuel > 0 // Boolean: True if this store sells the fuel
+                hasFuel: store.has_fuel > 0 
             };
         });
 
-        // Sort by Nearest
         storesWithDist.sort((a, b) => a.rawDistance - b.rawDistance);
         
-        // --- LOGIC: Filtering vs Warning ---
-        // If searching: Return everything (we will warn in UI).
-        // If locating (no search term): Only return stores that HAVE the fuel.
-        let finalResults;
-        if (search) {
-            // Return top 4 matches, regardless of fuel (UI handles the red text)
-            finalResults = storesWithDist.slice(0, 4);
-        } else {
-            // Filter strictly: Only show stores that actually sell the selected fuel
-            finalResults = storesWithDist.filter(s => s.hasFuel).slice(0, 4);
+        let finalResults = search ? storesWithDist.slice(0, 4) : storesWithDist.filter(s => s.hasFuel).slice(0, 4);
+        res.json(finalResults);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+// --- Save Alert Endpoint ---
+app.post('/api/alerts', async (req, res) => {
+    const { email, storeId, fuelEan, threshold } = req.body;
+    
+    if (!email || !storeId || !fuelEan || !threshold) {
+        return res.status(400).json({ error: "Missing fields" });
+    }
+
+    // threshold comes in Dollars (1.85), DB stores cents (185)
+    const thresholdCents = Math.round(threshold * 100);
+
+    try {
+        const result = await client.execute({
+            sql: `INSERT INTO alerts (email, store_id, fuel_ean, threshold_cents) VALUES (?, ?, ?, ?)`,
+            args: [email, storeId, fuelEan, thresholdCents]
+        });
+        res.json({ success: true, id: result.lastInsertRowid ? result.lastInsertRowid.toString() : '0' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to save alert" });
+    }
+});
+
+// --- Prediction Endpoint ---
+app.get('/api/predict', async (req, res) => {
+    try {
+        const { storeId, fuelEan, targetDate, model = 'linear' } = req.query;
+        const target = new Date(targetDate);
+        let predictionMetrics = null;
+        const history = [];
+
+        for (let i = -7; i <= 7; i++) {
+            const date = addDays(target, i);
+            const result = await makePrediction(storeId, fuelEan, date, model);
+            const priceVal = typeof result === 'object' ? result.price : result;
+            if (typeof result === 'object' && result.metrics) predictionMetrics = result.metrics;
+
+            history.push({
+                date: date,
+                displayDate: format(date, 'MMM dd'),
+                fullDate: format(date, 'MMM dd, yyyy'),
+                price: priceVal,
+                isTarget: i === 0,
+                isReal: i <= 0 
+            });
         }
 
-        // --- DEBUG LOG ---
-        if (finalResults.length === 0) {
-            console.log("   ⚠️ Result is empty! Checking why...");
-            const nearest = storesWithDist.slice(0, 3);
-            console.log("   Nearest stores to you (and their fuel status):");
-            nearest.forEach(s => console.log(`   - ${s.name}: ${s.hasFuel ? "HAS FUEL" : "NO FUEL DATA"} (${s.distance})`));
-        }
-        // -----------------
+        // Get Comparisons (Latest Prices)
+        const compRes = await client.execute({
+            sql: `SELECT fuel_type_ean, price_cents FROM prices WHERE store_id = ? GROUP BY fuel_type_ean HAVING retrieved_at = MAX(retrieved_at)`,
+            args: [storeId]
+        });
         
-        res.json(finalResults);
-    });
+        const comparisons = compRes.rows.map(row => ({
+            ean: row.fuel_type_ean,
+            price: row.price_cents / 1000
+        }));
+
+        res.json({
+            modelUsed: model,
+            history,
+            current: history.find(h => h.isTarget),
+            fuelComparisons: comparisons,
+            metrics: predictionMetrics
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // --- Optimal Recommendation Endpoint ---
 app.get('/api/recommendation', async (req, res) => {
     const { lat, lng, fuelEan, model = 'linear' } = req.query;
-    
     const userLat = parseFloat(lat) || -37.8136; 
     const userLng = parseFloat(lng) || 144.9631;
 
-    // 1. Find stores within 10km
-    const query = `SELECT * FROM stores WHERE is_fuel_store = 1`;
-    
-    db.all(query, [], async (err, rows) => {
-        if (err) return res.status(500).json({ error: "DB Error" });
-
-        // Filter by distance (10km) and sort by distance
-        const nearbyStores = rows.map(store => {
+    try {
+        const result = await client.execute(`SELECT * FROM stores WHERE is_fuel_store = 1`);
+        
+        const nearbyStores = result.rows.map(store => {
             const dist = getDistanceFromLatLonInKm(userLat, userLng, store.lat, store.lng);
             return { ...store, dist };
         })
         .filter(s => s.dist <= 10)
         .sort((a, b) => a.dist - b.dist)
-        .slice(0, 5); // LIMIT to top 5 stores to keep API fast
+        .slice(0, 5);
 
         if (nearbyStores.length === 0) return res.json(null);
 
         let bestOption = null;
         let minPrice = Infinity;
 
-        // 2. Predict prices for these stores for the next 7 days
         for (const store of nearbyStores) {
             const today = new Date();
-            
             for (let i = 0; i < 7; i++) {
                 const targetDate = addDays(today, i);
-                
-                // We reuse the existing engine
-                // Note: We await sequentially here. In high-scale apps, use Promise.all
                 const result = await makePrediction(store.store_id, fuelEan, targetDate, model);
                 const price = typeof result === 'object' ? result.price : result;
 
@@ -253,12 +187,13 @@ app.get('/api/recommendation', async (req, res) => {
                 }
             }
         }
-
-        // Return the absolute winner
         res.json(bestOption);
-    });
+    } catch(e) {
+        console.error(e);
+        res.status(500).json({error: "Server Error"});
+    }
 });
 
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });

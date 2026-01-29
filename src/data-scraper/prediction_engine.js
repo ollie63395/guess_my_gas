@@ -1,27 +1,22 @@
-const sqlite3 = require('sqlite3').verbose();
 const { SimpleLinearRegression } = require('ml-regression-simple-linear');
 const { PolynomialRegression } = require('ml-regression-polynomial');
 const { RandomForestRegression } = require('ml-random-forest');
-const { differenceInDays, format } = require('date-fns'); // Added format
 
-const path = require('path');
-const DB_FILE = path.join(__dirname, 'fuel_prices.db');
-const db = new sqlite3.Database(DB_FILE);
+const { differenceInDays } = require('date-fns'); // Added format
+const client = require('./db'); // Turso client
 
 // --- 1. Data Fetching Layer ---
 const getTrainingData = (storeId, fuelEan) => {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT price_cents, price_date 
-            FROM prices 
-            WHERE store_id = ? AND fuel_type_ean = ? 
-            ORDER BY price_date ASC
-            LIMIT 100 
-        `; 
-        db.all(query, [storeId, fuelEan], (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
+    return new Promise(async (resolve, reject) => {
+        try {
+            const result = await client.execute({
+                sql: `SELECT price_cents, price_date FROM prices WHERE store_id = ? AND fuel_type_ean = ? ORDER BY price_date ASC LIMIT 100`,
+                args: [storeId, fuelEan]
+            });
+            resolve(result.rows);
+        } catch (e) {
+            reject(e);
+        }
     });
 };
 
@@ -58,22 +53,20 @@ const preprocessData = (rawData) => {
 // --- Helper: Calculate Accuracy ---
 const calculateAccuracy = (model, cleanData) => {
 
+    // If absolutely no data, return empty structure
+    if (!model || cleanData.length === 0) {
+        return { accuracy: 0, correctCount: 0, totalCount: 7, avgDiff: 0, details: [] };
+    }
+
     // 1. Prepare variables
-    const TEST_WINDOW = 7;
-    const details = []; // Stores the day-by-day breakdown
+    const TEST_WINDOW = 30;
+
     let totalDiff = 0;
     let correctCount = 0;
     
     // 2. We need the last 7 days of REAL data
     // If we have less, we take what we have.
-    const daysAvailable = cleanData.length;
-    const daysToTest = Math.min(daysAvailable, TEST_WINDOW);
-    
-    // If absolutely no data, return empty structure
-    if (!model || daysAvailable === 0) {
-        return { accuracy: 0, correctCount: 0, totalCount: 7, avgDiff: 0, details: [] };
-    }
-
+    const daysToTest = Math.min(cleanData.length, TEST_WINDOW);
     const testSet = cleanData.slice(-daysToTest);
 
     // 3. Evaluate each day
@@ -87,19 +80,10 @@ const calculateAccuracy = (model, cleanData) => {
 
         const isCorrect = diff <= 0.05; // 5 cent margin
         if (isCorrect) correctCount++;
-
-        // Add to details list (Newest first will be sorted in UI)
-        details.push({
-            date: day.price_date,
-            predicted: predicted,
-            actual: actual,
-            diff: diff,
-            isCorrect: isCorrect
-        });
     });
 
-    const avgDiff = totalDiff / daysToTest;
-    const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / daysToTest || 1.85;
+    const avgDiff = totalDiff / testSet.length;
+    const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / testSet.length || 1.85;
     const accuracy = Math.max(0, Math.min(100, (1 - (avgDiff / avgPrice)) * 100));
 
     return {
@@ -200,7 +184,6 @@ class RandomForestModel {
 }
 
 // --- 3. The Engine (Factory) ---
-
 const Models = {
     'linear': LinearRegressionModel,
     'polynomial': PolynomialRegressionModel,
@@ -233,10 +216,9 @@ const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear'
         const dayOfMonth = new Date(targetDate).getDate();
         const fakeFluctuation = Math.sin(dayOfMonth * 0.5) * 0.05; 
 
-        const emptyMetrics = calculateAccuracy(null, []); 
         return { 
             price: Number((basePrice + fakeFluctuation).toFixed(3)), 
-            metrics: emptyMetrics 
+            metrics: accuracyMetrics 
         };
     }
 

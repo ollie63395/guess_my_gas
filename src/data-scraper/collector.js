@@ -40,12 +40,6 @@ const LOCATIONS = [
 const STORES_URL = `https://www.7eleven.com.au/storelocator-retail/mulesoft/stores?lat=${SEARCH_LAT}&long=${SEARCH_LONG}&dist=${SEARCH_DIST}`;
 const FUEL_PRICE_URL_BASE = 'https://www.7eleven.com.au/storelocator-retail/mulesoft/fuelPrices?storeNo=';
 
-// --- Database Setup ---
-const db = new sqlite3.Database(DB_FILE);
-
-// Configure SQLite to wait up to 5 seconds if the DB is busy, instead of crashing
-db.configure('busyTimeout', 5000);
-
 // --- Email Logic ---
 const createTransporter = () => {
     return nodemailer.createTransport({
@@ -61,16 +55,26 @@ const createTransporter = () => {
 async function initDB() {
     await client.execute(`CREATE TABLE IF NOT EXISTS stores (store_id TEXT PRIMARY KEY, name TEXT, address TEXT, suburb TEXT, postcode TEXT, lat REAL, lng REAL, is_fuel_store INTEGER)`);
     await client.execute(`CREATE TABLE IF NOT EXISTS fuel_ref (ean TEXT PRIMARY KEY, name TEXT, description TEXT)`);
-    await client.execute(`INSERT OR IGNORE INTO fuel_ref (ean, name, description) VALUES 
-        ('52', 'ULP', 'Mobil Unleaded 91'),
-        ('53', 'Diesel', 'Mobil Diesel Efficient'),
-        ('54', 'LPG', 'AutoGas LPG'),
-        ('55', 'PULP', 'Mobil Extra 95'),
-        ('56', 'PULP98', 'Mobil Supreme+ 98'),
-        ('57', 'E10', 'Mobil Unleaded E10')`);
+    
+    // Insert using individual statements for compatibility
+    const fuels = [
+        ['52', 'ULP', 'Mobil Unleaded 91'],
+        ['53', 'Diesel', 'Mobil Diesel Efficient'],
+        ['54', 'LPG', 'AutoGas LPG'],
+        ['55', 'PULP', 'Mobil Extra 95'],
+        ['56', 'PULP98', 'Mobil Supreme+ 98'],
+        ['57', 'E10', 'Mobil Unleaded E10']
+    ];
+    for (const f of fuels) {
+        await client.execute({
+            sql: `INSERT OR IGNORE INTO fuel_ref (ean, name, description) VALUES (?, ?, ?)`,
+            args: f
+        });
+    }
+
     await client.execute(`CREATE TABLE IF NOT EXISTS prices (id INTEGER PRIMARY KEY AUTOINCREMENT, store_id TEXT, fuel_type_ean TEXT, price_cents INTEGER, price_date TEXT, retrieved_at TEXT)`);
     await client.execute(`CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, store_id TEXT, fuel_ean TEXT, threshold_cents INTEGER, last_sent_at TEXT)`);
-    console.log("Database tables checked.");
+    console.log("Database initialized (Turso).");
 }
 
 // --- Alert Checking Logic ---
@@ -132,7 +136,7 @@ async function fetchAndStoreData() {
                     // 2. Save Prices
                     if (store.isFuelStore) {
                         try {
-                            const pRes = await axios.get(`${PRICES_URL}${store.storeId}`);
+                            const pRes = await axios.get(`${FUEL_PRICE_URL_BASE}${store.storeId}`);
                             let prices = pRes.data;
                             if (prices && prices.data) prices = prices.data;
 
@@ -147,7 +151,7 @@ async function fetchAndStoreData() {
                         } catch (e) { /* ignore individual store error */ }
                     }
                 }
-            } catch (e) { console.error(`Failed loc ${loc.name}`); }
+            } catch (e) { console.error(`Failed loc ${loc.name}: ${e.message}`); }
         }
 
         await checkAlerts();
@@ -155,7 +159,7 @@ async function fetchAndStoreData() {
 
     } catch (error) {
         console.error("Critical Error:", error);
-        process.exit(1); // Exit with error for GitHub Actions
+        process.exit(1); 
     }
 }
 
