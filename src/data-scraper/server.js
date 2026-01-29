@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const client = require('./db');
 
 const { addDays, format } = require('date-fns');
 const { makePrediction } = require('./prediction_engine');

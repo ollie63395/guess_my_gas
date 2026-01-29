@@ -2,13 +2,9 @@ const axios = require('axios');
 const nodemailer = require('nodemailer');
 const client = require('./db');
 
-// --- Configuration ---
-const SEARCH_LAT = -37.8780651;
-const SEARCH_LONG = 145.1016256;
-const SEARCH_DIST = 15; // Increased distance to get more data points
-
 // COMPREHENSIVE MELBOURNE COVERAGE
 // Scanning these points with a 15km radius covers almost all 7-Elevens in Greater Melbourne
+const SEARCH_DIST = 15;
 const LOCATIONS = [
     // Central & Inner
     { name: 'Melbourne CBD', lat: -37.8136, lng: 144.9631 },
