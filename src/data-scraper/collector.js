@@ -36,7 +36,7 @@ const LOCATIONS = [
     { name: 'Watergardens', lat: -37.7000, lng: 144.7700 }
 ];
 // --- URLs ---
-const STORES_URL = `https://www.7eleven.com.au/storelocator-retail/mulesoft/stores?lat=${SEARCH_LAT}&long=${SEARCH_LONG}&dist=${SEARCH_DIST}`;
+const STORES_URL = (lat, lng) => `https://www.7eleven.com.au/storelocator-retail/mulesoft/stores?lat=${lat}&long=${lng}&dist=${SEARCH_DIST}`;
 const FUEL_PRICE_URL_BASE = 'https://www.7eleven.com.au/storelocator-retail/mulesoft/fuelPrices?storeNo=';
 
 // --- Email Logic ---
