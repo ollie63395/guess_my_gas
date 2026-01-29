@@ -3,7 +3,6 @@ const nodemailer = require('nodemailer');
 const client = require('./db');
 
 // --- Configuration ---
-const DB_FILE = './fuel_prices.db';
 const SEARCH_LAT = -37.8780651;
 const SEARCH_LONG = 145.1016256;
 const SEARCH_DIST = 15; // Increased distance to get more data points
