@@ -44,7 +44,7 @@ const createTransporter = () => {
     return nodemailer.createTransport({
         service: 'gmail',
         auth: {
-            user: process.env.GMAIL_USER, // Update env var name ollie.guessmygas@gmail.com
+            user: process.env.GMAIL_USER,
             pass: process.env.GMAIL_APP_PASSWORD
         }
     });
