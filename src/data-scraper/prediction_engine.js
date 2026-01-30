@@ -126,7 +126,7 @@ class LinearRegressionModel {
         if (!this.model) return null;
         const xInput = differenceInDays(new Date(targetDate), this.startDate);
         const prediction = this.model.predict(xInput);
-        return Number(prediction.toFixed(3));
+        return (typeof prediction === 'number' && !isNaN(prediction)) ? Number(prediction.toFixed(3)) : null;
     }
 }
 
