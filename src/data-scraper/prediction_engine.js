@@ -63,6 +63,7 @@ const calculateAccuracy = (model, cleanData) => {
 
     let totalDiff = 0;
     let correctCount = 0;
+    const details = [];
     
     // 2. We need the last 7 days of REAL data
     // If we have less, we take what we have.
@@ -80,6 +81,15 @@ const calculateAccuracy = (model, cleanData) => {
 
         const isCorrect = diff <= 0.05; // 5 cent margin
         if (isCorrect) correctCount++;
+
+        // Add to details list
+        details.push({
+            date: day.price_date,
+            predicted: Number(predicted.toFixed(3)),
+            actual: Number(actual.toFixed(3)),
+            difference: Number(diff.toFixed(3)),
+            isCorrect: isCorrect
+        });
     });
 
     const avgDiff = totalDiff / testSet.length;
