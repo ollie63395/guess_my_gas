@@ -76,23 +76,22 @@ const calculateAccuracy = (model, cleanData) => {
         const predicted = model.predict(inputDate); // Dollars
         const actual = day.price_cents / 1000;      // Dollars
 
-        const diff = Math.abs(predicted - actual);
-        totalDiff += diff;
+        // SAFE CHECK: If prediction failed (null), skip this metric
+        if (predicted !== null && !isNaN(predicted)) {
+            const diff = Math.abs(predicted - actual);
+            totalDiff += diff;
+            const isCorrect = diff <= 0.05;
+            if (isCorrect) correctCount++;
+            details.push({ date: day.price_date, predicted, actual, diff, isCorrect });
+        }
 
-        const isCorrect = diff <= 0.05; // 5 cent margin
-        if (isCorrect) correctCount++;
-
-        // Add to details list
-        details.push({
-            date: day.price_date,
-            predicted: Number(predicted.toFixed(3)),
-            actual: Number(actual.toFixed(3)),
-            difference: Number(diff.toFixed(3)),
-            isCorrect: isCorrect
-        });
+        // Avoid NaN if we had 0 valid predictions
+        if (details.length === 0) {
+            return { accuracy: 0, correctCount: 0, totalCount: daysToTest, avgDiff: 0, details: [] };
+        }
     });
 
-    const avgDiff = totalDiff / testSet.length;
+    const avgDiff = totalDiff / details.length;
     const avgPrice = testSet.reduce((a, b) => a + b.price_cents/1000, 0) / testSet.length || 1.85;
     const accuracy = Math.max(0, Math.min(100, (1 - (avgDiff / avgPrice)) * 100));
 
@@ -157,7 +156,7 @@ class PolynomialRegressionModel {
         if (!this.model) return null;
         const xInput = differenceInDays(new Date(targetDate), this.startDate);
         const prediction = this.model.predict(xInput);
-        return Number(prediction.toFixed(3));
+        return (typeof prediction === 'number' && !isNaN(prediction)) ? Number(prediction.toFixed(3)) : null;
     }
 }
 
@@ -188,8 +187,12 @@ class RandomForestModel {
     predict(targetDate) {
         if (!this.model) return null;
         const xInput = differenceInDays(new Date(targetDate), this.startDate);
-        const prediction = this.model.predict([[xInput]])[0];
-        return Number(prediction.toFixed(3));
+        const prediction = this.model.predict([[xInput]]);
+
+        if (Array.isArray(prediction) && typeof prediction[0] === 'number' && !isNaN(prediction[0])) {
+            return Number(prediction[0].toFixed(3));
+        }
+        return null;
     }
 }
 
@@ -234,13 +237,12 @@ const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear'
 
     const predicted = strategy.predict(targetDate);
 
-    // Guard against NaN/Infinity
-    if (!Number.isFinite(predicted)) {
-        return cleanData[cleanData.length - 1].price_cents / 1000;
+    if (predicted === null) {
+        predicted = cleanData[cleanData.length - 1].price_cents / 1000;
     }
 
     return {
-        price: Number.isFinite(predicted) ? predicted : 1.85,
+        price: predicted,
         metrics: accuracyMetrics
     };
 };
