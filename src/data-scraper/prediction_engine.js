@@ -235,10 +235,12 @@ const makePrediction = async (storeId, fuelEan, targetDate, modelType = 'linear'
         };
     }
 
-    const predicted = strategy.predict(targetDate);
+    let predicted = strategy.predict(targetDate);
 
-    if (predicted === null) {
-        predicted = cleanData[cleanData.length - 1].price_cents / 1000;
+    if (predicted === null || !Number.isFinite(predicted)) {
+        predicted = cleanData.length > 0
+            ? cleanData[cleanData.length - 1].price_cents / 1000
+            : 1.85;
     }
 
     return {
