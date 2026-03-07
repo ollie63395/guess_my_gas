@@ -3,13 +3,13 @@ const cors = require('cors');
 const client = require('./db');
 
 const { addDays, format } = require('date-fns');
-const { makePrediction } = require('./prediction_engine');
+const { makePrediction, getTrainingData } = require('./prediction_engine');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors()); // Allow React (localhost:5173) to talk to us
-app.use(express.json()); 
+app.use(express.json());
 
 // --- Helper: Calculate Distance (Haversine Formula) ---
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
@@ -31,7 +31,7 @@ function deg2rad(deg) {
 // --- Store Search Endpoint ---
 app.get('/api/stores', async (req, res) => {
     const { search, lat, lng, fuelEan } = req.query;
-    const userLat = parseFloat(lat) || -37.8136; 
+    const userLat = parseFloat(lat) || -37.8136;
     const userLng = parseFloat(lng) || 144.9631;
 
     let query = `
@@ -55,16 +55,16 @@ app.get('/api/stores', async (req, res) => {
             return {
                 id: store.store_id,
                 name: store.name,
-                address: `${store.address}, ${store.suburb} ${store.postcode}`, 
+                address: `${store.address}, ${store.suburb} ${store.postcode}`,
                 distance: `${dist.toFixed(1)} km`,
                 rawDistance: dist,
                 coordinates: { lat: store.lat, lng: store.lng },
-                hasFuel: store.has_fuel > 0 
+                hasFuel: store.has_fuel > 0
             };
         });
 
         storesWithDist.sort((a, b) => a.rawDistance - b.rawDistance);
-        
+
         let finalResults = search ? storesWithDist.slice(0, 4) : storesWithDist.filter(s => s.hasFuel).slice(0, 4);
         res.json(finalResults);
 
@@ -77,7 +77,7 @@ app.get('/api/stores', async (req, res) => {
 // --- Save Alert Endpoint ---
 app.post('/api/alerts', async (req, res) => {
     const { email, storeId, fuelEan, threshold } = req.body;
-    
+
     if (!email || !storeId || !fuelEan || !threshold) {
         return res.status(400).json({ error: "Missing fields" });
     }
@@ -105,9 +105,12 @@ app.get('/api/predict', async (req, res) => {
         let predictionMetrics = null;
         const history = [];
 
+        // ONLY FETCH ONCE PER REQUEST OR PULL FROM MEMORY
+        const cachedTrainingData = await getTrainingData(storeId, fuelEan);
+
         for (let i = -7; i <= 7; i++) {
             const date = addDays(target, i);
-            const result = await makePrediction(storeId, fuelEan, date, model);
+            const result = await makePrediction(storeId, fuelEan, date, model, cachedTrainingData);
             const priceVal = typeof result === 'object' ? result.price : result;
             if (typeof result === 'object' && result.metrics) predictionMetrics = result.metrics;
 
@@ -117,7 +120,7 @@ app.get('/api/predict', async (req, res) => {
                 fullDate: format(date, 'MMM dd, yyyy'),
                 price: priceVal,
                 isTarget: i === 0,
-                isReal: i <= 0 
+                isReal: i <= 0
             });
         }
 
@@ -126,7 +129,7 @@ app.get('/api/predict', async (req, res) => {
             sql: `SELECT fuel_type_ean, price_cents FROM prices WHERE store_id = ? GROUP BY fuel_type_ean HAVING retrieved_at = MAX(retrieved_at)`,
             args: [storeId]
         });
-        
+
         const comparisons = compRes.rows.map(row => ({
             ean: row.fuel_type_ean,
             price: row.price_cents / 1000
@@ -149,19 +152,19 @@ app.get('/api/predict', async (req, res) => {
 // --- Optimal Recommendation Endpoint ---
 app.get('/api/recommendation', async (req, res) => {
     const { lat, lng, fuelEan, model = 'linear' } = req.query;
-    const userLat = parseFloat(lat) || -37.8136; 
+    const userLat = parseFloat(lat) || -37.8136;
     const userLng = parseFloat(lng) || 144.9631;
 
     try {
         const result = await client.execute(`SELECT * FROM stores WHERE is_fuel_store = 1`);
-        
+
         const nearbyStores = result.rows.map(store => {
             const dist = getDistanceFromLatLonInKm(userLat, userLng, store.lat, store.lng);
             return { ...store, dist };
         })
-        .filter(s => s.dist <= 10)
-        .sort((a, b) => a.dist - b.dist)
-        .slice(0, 5);
+            .filter(s => s.dist <= 10)
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, 5);
 
         if (nearbyStores.length === 0) return res.json(null);
 
@@ -170,9 +173,12 @@ app.get('/api/recommendation', async (req, res) => {
 
         for (const store of nearbyStores) {
             const today = new Date();
+            // ONLY FETCH ONCE PER STORE PER REQUEST OR PULL FROM MEMORY
+            const cachedTrainingData = await getTrainingData(store.store_id, fuelEan);
+
             for (let i = 0; i < 7; i++) {
                 const targetDate = addDays(today, i);
-                const result = await makePrediction(store.store_id, fuelEan, targetDate, model);
+                const result = await makePrediction(store.store_id, fuelEan, targetDate, model, cachedTrainingData);
                 const price = typeof result === 'object' ? result.price : result;
 
                 if (price < minPrice) {
@@ -189,9 +195,9 @@ app.get('/api/recommendation', async (req, res) => {
             }
         }
         res.json(bestOption);
-    } catch(e) {
+    } catch (e) {
         console.error(e);
-        res.status(500).json({error: "Server Error"});
+        res.status(500).json({ error: "Server Error" });
     }
 });
 
