@@ -36,7 +36,7 @@ app.get('/api/stores', async (req, res) => {
 
     let query = `
         SELECT s.*, 
-        (SELECT COUNT(*) FROM prices p WHERE p.store_id = s.store_id AND p.fuel_type_ean = ?) as has_fuel
+        EXISTS(SELECT 1 FROM prices p WHERE p.store_id = s.store_id AND p.fuel_type_ean = ?) as has_fuel
         FROM stores s 
         WHERE s.is_fuel_store = 1
     `;
