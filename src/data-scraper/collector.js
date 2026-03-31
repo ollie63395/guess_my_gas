@@ -8,7 +8,7 @@ const SEARCH_DIST = 15;
 const LOCATIONS = [
     // Central & Inner
     { name: 'Melbourne CBD', lat: -37.8136, lng: 144.9631 },
-    
+
     // South East & Bayside
     { name: 'St Kilda/Brighton', lat: -37.8850, lng: 144.9900 },
     { name: 'Moorabbin/Cheltenham', lat: -37.9500, lng: 145.0600 },
@@ -20,7 +20,7 @@ const LOCATIONS = [
     { name: 'Box Hill', lat: -37.8200, lng: 145.1200 },
     { name: 'Ringwood', lat: -37.8150, lng: 145.2300 },
     { name: 'Ferntree Gully', lat: -37.8800, lng: 145.2900 },
-    
+
     // North
     { name: 'Preston/Reservoir', lat: -37.7200, lng: 145.0000 },
     { name: 'Epping', lat: -37.6500, lng: 145.0100 },
@@ -50,7 +50,7 @@ const createTransporter = () => {
 async function initDB() {
     await client.execute(`CREATE TABLE IF NOT EXISTS stores (store_id TEXT PRIMARY KEY, name TEXT, address TEXT, suburb TEXT, postcode TEXT, lat REAL, lng REAL, is_fuel_store INTEGER)`);
     await client.execute(`CREATE TABLE IF NOT EXISTS fuel_ref (ean TEXT PRIMARY KEY, name TEXT, description TEXT)`);
-    
+
     // Insert using individual statements for compatibility
     const fuels = [
         ['52', 'ULP', 'Mobil Unleaded 91'],
@@ -68,8 +68,10 @@ async function initDB() {
     }
 
     await client.execute(`CREATE TABLE IF NOT EXISTS prices (id INTEGER PRIMARY KEY AUTOINCREMENT, store_id TEXT, fuel_type_ean TEXT, price_cents INTEGER, price_date TEXT, retrieved_at TEXT)`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_prices_store_fuel ON prices(store_id, fuel_type_ean, price_date)`);
     await client.execute(`CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, store_id TEXT, fuel_ean TEXT, threshold_cents INTEGER, last_sent_at TEXT)`);
-    console.log("Database initialized (Turso).");
+
+    console.log("Database initialized (Turso) with indexes.");
 }
 
 // --- Alert Checking Logic ---
@@ -98,7 +100,7 @@ async function checkAlerts() {
                         from: '"GuessMyGas" <alerts@guessmygas.com>',
                         to: alert.email,
                         subject: "📉 Price Drop Alert!",
-                        text: `Good news! Fuel is down to ${(price/100).toFixed(1)}c/litre.`
+                        text: `Good news! Fuel is down to ${(price / 100).toFixed(1)}c/litre.`
                     });
                 } catch (e) { console.error("Email fail:", e); }
             }
@@ -154,7 +156,7 @@ async function fetchAndStoreData() {
 
     } catch (error) {
         console.error("Critical Error:", error);
-        process.exit(1); 
+        process.exit(1);
     }
 }
 
