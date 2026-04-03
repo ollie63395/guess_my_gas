@@ -25,12 +25,15 @@ const getTrainingData = (storeId, fuelEan) => {
 
         try {
             const result = await client.execute({
-                sql: `SELECT price_cents, price_date FROM prices WHERE store_id = ? AND fuel_type_ean = ? ORDER BY price_date ASC LIMIT 100`,
+                sql: `SELECT price_cents, price_date FROM prices WHERE store_id = ? AND fuel_type_ean = ? ORDER BY price_date DESC LIMIT 100`,
                 args: [storeId, fuelEan]
             });
             console.log(`[Cache Miss] Fetching Turso data for ${cacheKey}`);
-            tr_cache.set(cacheKey, { timestamp: now, data: result.rows });
-            resolve(result.rows);
+            
+            // Reverse so that data is in chronological order (oldest -> newest) for model training
+            const rows = result.rows.reverse();
+            tr_cache.set(cacheKey, { timestamp: now, data: rows });
+            resolve(rows);
         } catch (e) {
             reject(e);
         }
